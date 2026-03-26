@@ -1,0 +1,24 @@
+[package]
+name = "lattice-wasm"
+version = "0.1.0"
+edition = "2021"
+description = "WASM compute utilities for lattice generation — GPU-accelerated voxelization"
+
+[lib]
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]
+wasm-bindgen = "0.2"
+glam = { version = "0.27", default-features = false, features = ["libm"] }
+bytemuck = { version = "1.16", features = ["derive"] }
+wgpu = { version = "22", features = ["webgpu"] }
+thiserror = "1.0"
+futures = "0.3"
+wasm-bindgen-futures = "0.4"
+
+[target.'cfg(target_arch = "wasm32")'.dependencies]
+web-sys = { version = "0.3", features = ["console"] }
+
+[profile.release]
+opt-level = "s"
+lto = true

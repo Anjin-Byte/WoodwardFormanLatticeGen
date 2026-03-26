@@ -1,0 +1,66 @@
+@import "tailwindcss";
+
+/* ─── Phi Design Tokens (from Gestalt) ──────────────────────────────────── */
+
+:root {
+  /* Fonts */
+  --font-sans: system-ui, -apple-system, sans-serif;
+  --font-mono: ui-monospace, "SF Mono", monospace;
+
+  /* Text hierarchy */
+  --text-hi:          oklch(0.96 0.003 250);
+  --text-mid:         oklch(0.88 0.004 250);
+  --text-lo:          oklch(0.75 0.005 250);
+  --text-subtle:      oklch(0.55 0.01  250);
+  --text-faint:       oklch(0.46 0.01  250);
+
+  /* Surface layers (dark theme, deepest → highest) */
+  --surface-0:        oklch(0.12 0.015 250);
+  --surface-1:        oklch(0.14 0.015 250);
+  --surface-2:        oklch(0.16 0.015 250);
+  --surface-3:        oklch(0.18 0.015 250);
+  --surface-4:        oklch(0.20 0.015 250);
+  --surface-5:        oklch(0.22 0.015 250);
+
+  /* Fill overlays (white at varying opacity) */
+  --fill-lo:          oklch(1 0 0 / 5%);
+  --fill-mid:         oklch(1 0 0 / 8%);
+  --fill-hi:          oklch(1 0 0 / 14%);
+  --fill-inset:       oklch(0 0 0 / 22%);
+
+  /* Strokes / borders */
+  --stroke-lo:        oklch(1 0 0 / 6%);
+  --stroke-mid:       oklch(1 0 0 / 12%);
+  --stroke-hi:        oklch(1 0 0 / 22%);
+  --stroke-strong:    oklch(1 0 0 / 35%);
+
+  /* Interactive accent */
+  --interactive:      oklch(0.80 0.16 250);
+  --interactive-hi:   oklch(0.86 0.17 250);
+  --interactive-fill: oklch(0.80 0.16 250 / 14%);
+  --interactive-ring: oklch(0.80 0.16 250 / 30%);
+
+  /* Status colors */
+  --color-success:     oklch(0.72 0.17 160);
+  --color-warning:     oklch(0.76 0.12 80);
+  --color-destructive: oklch(0.68 0.18 25);
+  --color-interactive: var(--interactive);
+  --color-meta:        oklch(0.68 0.08 250);
+}
+
+/* ─── Global Reset ──────────────────────────────────────────────────────── */
+
+html,
+body,
+#app {
+  margin: 0;
+  padding: 0;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  background: var(--surface-2);
+  color: var(--text-mid);
+  font-family: var(--font-sans);
+  font-size: 13px;
+  -webkit-font-smoothing: antialiased;
+}

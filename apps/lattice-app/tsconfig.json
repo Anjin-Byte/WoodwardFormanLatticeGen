@@ -1,0 +1,14 @@
+{
+  "extends": "../../tsconfig.json",
+  "compilerOptions": {
+    "outDir": "./dist",
+    "rootDir": "../..",
+    "paths": {
+      "$lib/*": ["./src/lib/*"],
+      "@lattice/core": ["../../packages/lattice-core/src/index.ts"],
+      "@lattice/ui": ["../../packages/ui/src/index.ts"],
+      "@lattice/viewer": ["../../packages/viewer/src/index.ts"]
+    }
+  },
+  "include": ["src", "vite-env.d.ts"]
+}

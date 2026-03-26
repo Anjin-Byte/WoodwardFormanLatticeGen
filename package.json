@@ -1,0 +1,20 @@
+{
+  "name": "@lattice/monorepo",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "pnpm --filter @lattice/app dev",
+    "build": "pnpm -r build",
+    "preview": "pnpm --filter @lattice/app preview",
+    "check": "pnpm --filter @lattice/app check",
+    "test": "pnpm -r test",
+    "test:e2e": "pnpm --filter @lattice/app test:e2e",
+    "build:wasm": "cd crates/lattice-wasm && wasm-pack build --target web --out-dir ../../packages/lattice-wasm-pkg"
+  },
+  "engines": {
+    "node": ">=20",
+    "pnpm": ">=9"
+  },
+  "packageManager": "pnpm@9.15.9"
+}

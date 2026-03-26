@@ -1,0 +1,29 @@
+node_modules/
+dist/
+build/
+.svelte-kit/
+.vite/
+*.local
+
+# Rust/WASM
+target/
+pkg/
+crates/*/pkg/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode/settings.json
+.idea/
+
+# Test
+test-results/
+playwright-report/
+coverage/
+
+# Env
+.env
+.env.*
+!.env.example
