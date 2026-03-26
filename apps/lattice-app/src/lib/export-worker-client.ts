@@ -79,7 +79,7 @@ function getWorker(): Worker {
 }
 
 export interface WorkerExportOptions {
-  mode: 'js' | 'direct';
+  mode: 'js' | 'direct' | 'csg';
   graph: BeamGraph;
   trim: TrimResult | null;
   skin: SkinGraph | null;
@@ -87,6 +87,7 @@ export interface WorkerExportOptions {
   mcDensity?: number;
   filletK?: number;
   segments?: number;
+  wasmUrl?: string;
   onProgress?: (phase: string, pct: number) => void;
 }
 
@@ -134,6 +135,7 @@ export function runExportInWorker(options: WorkerExportOptions): Promise<ExportR
       mcDensity: options.mcDensity,
       filletK: options.filletK,
       segments: options.segments,
+      wasmUrl: options.wasmUrl,
     });
   });
 }

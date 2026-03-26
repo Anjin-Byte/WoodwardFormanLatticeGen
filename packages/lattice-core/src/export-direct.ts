@@ -22,7 +22,7 @@ export interface DirectExportOptions {
  * appending positions and indices to the output arrays.
  * Returns the number of triangles added.
  */
-function tessellateCylinder(
+export function tessellateCylinder(
   p0x: number, p0y: number, p0z: number,
   p1x: number, p1y: number, p1z: number,
   radius: number,

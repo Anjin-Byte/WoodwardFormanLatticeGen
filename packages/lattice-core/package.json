@@ -15,5 +15,8 @@
   "scripts": {
     "test": "vitest run",
     "test:watch": "vitest"
+  },
+  "dependencies": {
+    "manifold-3d": "^3.4.1"
   }
 }

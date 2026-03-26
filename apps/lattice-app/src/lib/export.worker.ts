@@ -4,6 +4,7 @@
 import {
   exportLattice,
   exportLatticeDirect,
+  exportLatticeCsg,
 } from '@lattice/core';
 import type {
   BeamGraph, TrimResult, SkinGraph,
@@ -21,7 +22,7 @@ interface SerializedTrimResult {
 
 interface ExportRequest {
   type: 'export';
-  mode: 'js' | 'direct';
+  mode: 'js' | 'direct' | 'csg';
   graph: BeamGraph;
   trim: SerializedTrimResult | null;
   skin: SkinGraph | null;
@@ -29,6 +30,7 @@ interface ExportRequest {
   mcDensity?: number;
   filletK?: number;
   segments?: number;
+  wasmUrl?: string;
 }
 
 interface ProgressMessage {
@@ -82,7 +84,12 @@ self.onmessage = async (e: MessageEvent<ExportRequest>) => {
   try {
     let result: ExportResult;
 
-    if (req.mode === 'direct') {
+    if (req.mode === 'csg') {
+      result = await exportLatticeCsg(
+        req.graph, trim, req.skin, req.absoluteRadius,
+        { segments: req.segments, wasmUrl: req.wasmUrl, onProgress },
+      );
+    } else if (req.mode === 'direct') {
       result = exportLatticeDirect(
         req.graph, trim, req.skin, req.absoluteRadius,
         { segments: req.segments, onProgress },

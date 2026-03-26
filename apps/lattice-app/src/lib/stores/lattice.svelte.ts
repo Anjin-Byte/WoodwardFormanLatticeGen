@@ -438,23 +438,23 @@ let exportMcDensity = $state<number | null>(null);
 let exportFilletK   = $state<number | null>(null);
 let exportProgress  = $state(0);
 let exportPhase     = $state('');
-let exportTierUsed  = $state<'gpu' | 'js' | 'direct' | ''>('');
-let exportTierOverride = $state<'auto' | 'gpu' | 'js' | 'direct'>('auto');
+let exportTierUsed  = $state<'gpu' | 'js' | 'direct' | 'csg' | ''>('');
+let exportTierOverride = $state<'auto' | 'gpu' | 'js' | 'direct' | 'csg'>('auto');
 let lastExportStatus = $state<'ok' | 'error' | ''>('');
 let lastExportSummary = $state('');
 
 export function getExportInProgress(): boolean { return exportInProgress; }
 export function getExportProgress(): number { return exportProgress; }
 export function getExportPhase(): string { return exportPhase; }
-export function getExportTierUsed(): 'gpu' | 'js' | 'direct' | '' { return exportTierUsed; }
+export function getExportTierUsed(): 'gpu' | 'js' | 'direct' | 'csg' | '' { return exportTierUsed; }
 export function getLastExportStatus(): 'ok' | 'error' | '' { return lastExportStatus; }
 export function getLastExportSummary(): string { return lastExportSummary; }
 export function getExportMcDensity(): number | null { return exportMcDensity; }
 export function setExportMcDensity(v: number | null) { exportMcDensity = v; }
 export function getExportFilletK(): number | null { return exportFilletK; }
 export function setExportFilletK(v: number | null) { exportFilletK = v; }
-export function getExportTierOverride(): 'auto' | 'gpu' | 'js' | 'direct' { return exportTierOverride; }
-export function setExportTierOverride(v: 'auto' | 'gpu' | 'js' | 'direct') { exportTierOverride = v; }
+export function getExportTierOverride(): 'auto' | 'gpu' | 'js' | 'direct' | 'csg' { return exportTierOverride; }
+export function setExportTierOverride(v: 'auto' | 'gpu' | 'js' | 'direct' | 'csg') { exportTierOverride = v; }
 
 /** Auto MC density: ≥ 3 samples across strut diameter. */
 export function getAutoMcDensity(): number {
@@ -476,11 +476,12 @@ export async function triggerExport(): Promise<void> {
   lastExportStatus = '';
   lastExportSummary = '';
 
+  const useCsg = exportTierOverride === 'csg';
   const useDirect = exportTierOverride === 'direct';
-  const useGpu = !useDirect && (exportTierOverride === 'gpu'
+  const useGpu = !useCsg && !useDirect && (exportTierOverride === 'gpu'
     || (exportTierOverride === 'auto' && getSdfExporterTier() === 'gpu'));
   const gpuExporter = useGpu ? getSdfExporter() : null;
-  const tier = useDirect ? 'Direct' : gpuExporter ? 'GPU' : 'JS';
+  const tier = useCsg ? 'CSG' : useDirect ? 'Direct' : gpuExporter ? 'GPU' : 'JS';
 
   console.log(`[export] Starting export — pipeline: ${tier}, override: ${exportTierOverride}, gpu available: ${getSdfExporterTier()}`);
   console.log(`[export] Beams: ${output.graph.beamCount}, radius: ${getAbsoluteRadius().toFixed(4)}`);
@@ -514,9 +515,9 @@ export async function triggerExport(): Promise<void> {
         },
       );
     } else {
-      // JS and Direct paths run in a Web Worker to keep UI responsive
-      exportTierUsed = useDirect ? 'direct' : 'js';
-      const mode = useDirect ? 'direct' : 'js';
+      // JS, Direct, and CSG paths run in a Web Worker to keep UI responsive
+      exportTierUsed = useCsg ? 'csg' : useDirect ? 'direct' : 'js';
+      const mode = useCsg ? 'csg' as const : useDirect ? 'direct' as const : 'js' as const;
       console.log(`[export] Running ${tier} export in Web Worker...`);
       const { runExportInWorker } = await import('$lib/export-worker-client');
       result = await runExportInWorker({
@@ -527,6 +528,7 @@ export async function triggerExport(): Promise<void> {
         absoluteRadius: getAbsoluteRadius(),
         mcDensity: exportMcDensity ?? undefined,
         filletK: exportFilletK ?? undefined,
+        wasmUrl: useCsg ? `${import.meta.env.BASE_URL}manifold.wasm` : undefined,
         onProgress,
       });
     }

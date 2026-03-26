@@ -144,19 +144,20 @@
       label="Pipeline"
       options={[
         { value: 'direct', label: 'Direct' },
+        { value: 'csg', label: 'CSG' },
         { value: 'auto', label: getExportTierAvailable() === 'gpu' ? 'Auto (GPU)' : 'Auto (JS)' },
         { value: 'gpu', label: 'GPU' },
         { value: 'js', label: 'JS' },
       ]}
       value={getExportTierOverride()}
-      onValueChange={(v) => setExportTierOverride(v as 'auto' | 'gpu' | 'js' | 'direct')}
+      onValueChange={(v) => setExportTierOverride(v as 'auto' | 'gpu' | 'js' | 'direct' | 'csg')}
     />
 
     {#if getExportInProgress()}
       {@const phase = getExportPhase()}
       {@const pct = getExportProgress()}
-      {@const phaseLabels = { accel: 'Building accel', sdf: 'SDF evaluation', mc: 'Marching cubes', stl: 'Writing STL', gpu: 'GPU compute', tessellate: 'Tessellating' } as Record<string, string>}
-      {@const indeterminate = phase === 'gpu' && pct < 1}
+      {@const phaseLabels = { accel: 'Building accel', sdf: 'SDF evaluation', mc: 'Marching cubes', stl: 'Writing STL', gpu: 'GPU compute', tessellate: 'Tessellating', init: 'Loading CSG engine', union: 'Boolean union' } as Record<string, string>}
+      {@const indeterminate = (phase === 'gpu' || phase === 'union') && pct < 1}
       <div class="export-progress">
         <div class="progress-header">
           <span class="progress-label">{phaseLabels[phase] || phase || 'Starting...'}</span>
@@ -190,7 +191,7 @@
         <StatusIndicator
           status={getLastExportStatus() === 'ok' ? 'ok' : 'error'}
           pulse={false}
-          label={getExportTierUsed() === 'gpu' ? 'GPU' : getExportTierUsed() === 'direct' ? 'Direct' : 'JS'}
+          label={getExportTierUsed() === 'gpu' ? 'GPU' : getExportTierUsed() === 'csg' ? 'CSG' : getExportTierUsed() === 'direct' ? 'Direct' : 'JS'}
         />
         <span class="export-summary">{getLastExportSummary()}</span>
       </div>
