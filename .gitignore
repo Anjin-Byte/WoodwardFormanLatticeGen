@@ -27,3 +27,8 @@ coverage/
 .env
 .env.*
 !.env.example
+
+# Internal docs and reports
+docs/
+standards.md
+sources/
