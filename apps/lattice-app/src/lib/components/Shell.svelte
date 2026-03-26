@@ -3,7 +3,7 @@
   import type { DockPanelGroup, IGridView } from '@gestalt/phi';
   import Viewport from './Viewport.svelte';
   import PropertiesPanel from './panels/PropertiesPanel.svelte';
-  import OutlinerPanel from './panels/OutlinerPanel.svelte';
+  import ScenePanel from './panels/ScenePanel.svelte';
   import StatisticsPanel from './panels/StatisticsPanel.svelte';
   import StatusBar from './shell/StatusBar.svelte';
 
@@ -18,28 +18,21 @@
     };
   }
 
-  // 4-panel layout: [Properties | Viewport | Outliner / Statistics]
+  // 3-column layout: [Properties | Viewport | Scene+Stats]
   const gridview = new Gridview('horizontal');
 
   const propertiesView = makeView('properties', { minW: 200 });
   const viewportView = makeView('viewport', { minW: 300 });
-  const outlinerView = makeView('outliner', { minW: 180 });
-  const statisticsView = makeView('statistics', { minW: 180 });
+  const rightView = makeView('right', { minW: 160 });
 
-  // Left: Properties (260px)
   gridview.addView(propertiesView, 260, [0]);
-  // Center: Viewport (fills remaining)
-  gridview.addView(viewportView, 600, [1]);
-  // Right: vertical split — Outliner (top) + Statistics (bottom)
-  gridview.addView(outlinerView, 240, [2]);
-  // Split the right panel vertically by adding Statistics below Outliner
-  gridview.addView(statisticsView, 300, [2, 1]);
+  gridview.addView(viewportView, 700, [1]);
+  gridview.addView(rightView, 200, [2]);
 
   let groups: Record<string, DockPanelGroup> = $state({
     properties: { id: 'properties', panels: ['Properties'], activePanel: 'Properties' },
     viewport: { id: 'viewport', panels: ['Viewport'], activePanel: 'Viewport' },
-    outliner: { id: 'outliner', panels: ['Outliner'], activePanel: 'Outliner' },
-    statistics: { id: 'statistics', panels: ['Statistics'], activePanel: 'Statistics' },
+    right: { id: 'right', panels: ['Scene', 'Statistics'], activePanel: 'Scene' },
   });
 </script>
 
@@ -55,8 +48,8 @@
     <Viewport />
   {:else if panelId === 'Properties'}
     <PropertiesPanel />
-  {:else if panelId === 'Outliner'}
-    <OutlinerPanel />
+  {:else if panelId === 'Scene'}
+    <ScenePanel />
   {:else if panelId === 'Statistics'}
     <StatisticsPanel />
   {/if}

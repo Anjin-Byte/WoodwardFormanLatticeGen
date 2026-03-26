@@ -5,6 +5,7 @@
     getLatticeRenderData, getDomainTriangleMesh, getActiveGrid, getClippedBeams,
     getShowBeams, getShowSkin, getShowDomainMesh, getShowGridBounds, getShowAxes,
     getDomainDisplayMode,
+    getRenderCylinderSegments, getRenderFlatShading,
   } from '$lib/stores/lattice.svelte';
   import type { BeamRenderData, TriangleMesh, ClippedBeamResult } from '@lattice/core';
   import * as THREE from 'three';
@@ -19,10 +20,11 @@
   let gridBoundsObj: THREE.LineSegments | null = null;
   let axesObj: THREE.AxesHelper | null = null;
 
-  // Reference tracking for incremental updates
-  let prevRenderData: BeamRenderData | null = null;
-  let prevClipped: ClippedBeamResult[] | null = null;
   let prevDomainMesh: TriangleMesh | null = null;
+
+  // Derived values ensure Svelte tracks these as reactive dependencies
+  const renderSegments = $derived(getRenderCylinderSegments());
+  const renderFlat = $derived(getRenderFlatShading());
 
   onMount(() => {
     viewer = new Viewer();
@@ -34,56 +36,60 @@
 
   // ─── Lattice instanced beams ──────────────────────────────────────────────
 
+  // Separate effect for visibility (cheap, no rebuild)
+  $effect(() => {
+    if (latticeMesh) latticeMesh.visible = getShowBeams();
+  });
+
+  // Rebuild mesh when data or quality changes
   $effect(() => {
     const data = getLatticeRenderData();
-    const show = getShowBeams();
-    if (!viewer) return;
-
-    if (data !== prevRenderData) {
-      // Try incremental update if count matches
-      if (latticeMesh && data && prevRenderData && data.count === prevRenderData.count) {
-        updateLatticeMesh(latticeMesh, data);
-      } else {
-        // Full rebuild
-        if (latticeMesh) {
-          viewer.remove(latticeMesh);
-          latticeMesh.geometry.dispose();
-          (latticeMesh.material as THREE.Material).dispose();
-          latticeMesh = null;
-        }
-        if (data && data.count > 0) {
-          latticeMesh = createLatticeMesh(data);
-          viewer.add(latticeMesh);
-        }
+    const segments = renderSegments;
+    const flatShading = renderFlat;
+    if (!viewer || !data || data.count === 0) {
+      if (latticeMesh) {
+        viewer?.remove(latticeMesh);
+        latticeMesh.geometry.dispose();
+        (latticeMesh.material as THREE.Material).dispose();
+        latticeMesh = null;
       }
-      prevRenderData = data;
+      return;
     }
 
-    if (latticeMesh) latticeMesh.visible = show;
+    // Always dispose and rebuild — segments/flatShading/data may have changed
+    console.log(`[viewport] Rebuilding lattice mesh: segments=${segments}, flatShading=${flatShading}, beams=${data.count}`);
+    if (latticeMesh) {
+      viewer.remove(latticeMesh);
+      latticeMesh.geometry.dispose();
+      (latticeMesh.material as THREE.Material).dispose();
+    }
+    latticeMesh = createLatticeMesh(data, { segments, flatShading });
+    latticeMesh.visible = getShowBeams();
+    viewer.add(latticeMesh);
   });
 
   // ─── Clipped boundary beams ───────────────────────────────────────────────
 
   $effect(() => {
+    if (clippedMeshObj) clippedMeshObj.visible = getShowBeams();
+  });
+
+  $effect(() => {
     const clipped = getClippedBeams();
-    const show = getShowBeams();
+    const flatShading = renderFlat;
     if (!viewer) return;
 
-    if (clipped !== prevClipped) {
-      if (clippedMeshObj) {
-        viewer.remove(clippedMeshObj);
-        clippedMeshObj.geometry.dispose();
-        (clippedMeshObj.material as THREE.Material).dispose();
-        clippedMeshObj = null;
-      }
-      if (clipped.length > 0) {
-        clippedMeshObj = mergeClippedMeshes(clipped);
-        viewer.add(clippedMeshObj);
-      }
-      prevClipped = clipped;
+    if (clippedMeshObj) {
+      viewer.remove(clippedMeshObj);
+      clippedMeshObj.geometry.dispose();
+      (clippedMeshObj.material as THREE.Material).dispose();
+      clippedMeshObj = null;
     }
-
-    if (clippedMeshObj) clippedMeshObj.visible = show;
+    if (clipped.length > 0) {
+      clippedMeshObj = mergeClippedMeshes(clipped, flatShading);
+      clippedMeshObj.visible = getShowBeams();
+      viewer.add(clippedMeshObj);
+    }
   });
 
   // ─── Domain mesh ──────────────────────────────────────────────────────────
@@ -140,7 +146,7 @@
 
   // ─── Helpers ──────────────────────────────────────────────────────────────
 
-  function mergeClippedMeshes(clipped: ClippedBeamResult[]): THREE.Mesh {
+  function mergeClippedMeshes(clipped: ClippedBeamResult[], flatShading = false): THREE.Mesh {
     let tv = 0, tt = 0;
     for (const c of clipped) { tv += c.mesh.vertexCount; tt += c.mesh.triangleCount; }
 
@@ -162,7 +168,7 @@
     geo.computeVertexNormals();
 
     const mesh = new THREE.Mesh(geo, new THREE.MeshStandardMaterial({
-      color: 0xff8c00, side: THREE.DoubleSide, flatShading: true,
+      color: 0xff8c00, side: THREE.DoubleSide, flatShading,
     }));
     mesh.castShadow = true;
     mesh.receiveShadow = true;

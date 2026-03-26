@@ -1,9 +1,9 @@
 import {
   createUnitCell, createGrid, populate, buildBeamGraph, buildRenderData,
   totalCells,
-  createBoxDomain, createSphereDomain, createMeshDomain,
+  createBoxDomain, createSphereDomain, createMeshDomain, createTriangleMesh,
   tessellateBox, tessellateSphere,
-  classifyCells, applyClassification, trimBeams,
+  classifyCells, applyClassification, reclassifyLeakedBeams, trimBeams,
   generateSkin,
   computeLatticeProperties,
   occupancyToClassification,
@@ -23,22 +23,23 @@ initWasm();
 
 let unitCellId    = $state<string>('cubic');
 let rStar         = $state(0.08);
-let resolution    = $state(8);
+let cellWidth     = $state(1.0); // l_c in mm (paper: Woodward & Fromen)
 let padding       = $state(1);
 let manualNx      = $state(4);
 let manualNy      = $state(4);
 let manualNz      = $state(4);
-let manualCellSize = $state(1.0);
-let domainEnabled  = $state(false);
+let domainEnabled  = $state(true);
 let domainShape    = $state<'box' | 'sphere'>('sphere');
 let domainRadius   = $state(1.5);
 let domainSource   = $state<'generated' | 'file'>('generated');
 let meshFileBuffer = $state<ArrayBuffer | null>(null);
 let meshFileName   = $state('');
 let meshInfo       = $state<{ vertices: number; triangles: number } | null>(null);
+let meshNativeExtent = $state(0);    // longest axis of raw mesh (before scaling)
+let domainSize     = $state(10);     // target longest axis in mm
 let skinEnabled    = $state(false);
 
-// ─── Render layers ──────────────────────────────────────────────────────────
+// ─── Render layers & quality ────────────────────────────────────────────────
 
 let showBeams        = $state(true);
 let showSkin         = $state(true);
@@ -47,6 +48,13 @@ let showGridBounds   = $state(false);
 let showAxes         = $state(true);
 let domainDisplayMode = $state<'solid' | 'wireframe' | 'transparent'>('transparent');
 let voxelizerTierOverride = $state<'auto' | 'gpu' | 'cpu-wasm' | 'js'>('auto');
+let renderCylinderSegments = $state(8);
+let renderFlatShading      = $state(false);
+let renderWireframe        = $state(false);
+
+// ─── Deferred pipeline execution ────────────────────────────────────────────
+
+let paramsDirty = $state(true);  // true on first load to trigger initial generate
 
 // ─── Pipeline types ─────────────────────────────────────────────────────────
 
@@ -92,6 +100,15 @@ function getDomainAABB(): { min: [number, number, number]; max: [number, number,
       const mesh = meshFileName.toLowerCase().endsWith('.obj')
         ? parseOBJ(new TextDecoder().decode(meshFileBuffer))
         : parseSTL(meshFileBuffer);
+      // Scale mesh so longest axis = domainSize (mm)
+      const native = meshNativeExtent;
+      if (native > 0) {
+        const s = domainSize / native;
+        return {
+          min: [mesh.aabbMin[0] * s, mesh.aabbMin[1] * s, mesh.aabbMin[2] * s],
+          max: [mesh.aabbMax[0] * s, mesh.aabbMax[1] * s, mesh.aabbMax[2] * s],
+        };
+      }
       return { min: mesh.aabbMin, max: mesh.aabbMax };
     } catch { return null; }
   }
@@ -107,7 +124,7 @@ function computeGridFromDomain(): LatticeGrid | null {
   const rangeZ = aabb.max[2] - aabb.min[2];
   const maxRange = Math.max(rangeX, rangeY, rangeZ);
   if (maxRange <= 0) return null;
-  const cs = maxRange / resolution;
+  const cs = cellWidth;
   const nx = Math.max(1, Math.ceil(rangeX / cs) + padding * 2);
   const ny = Math.max(1, Math.ceil(rangeY / cs) + padding * 2);
   const nz = Math.max(1, Math.ceil(rangeZ / cs) + padding * 2);
@@ -122,7 +139,7 @@ let activeGrid = $derived.by<LatticeGrid>(() => {
     const g = computeGridFromDomain();
     if (g) return g;
   }
-  return createGrid(manualNx, manualNy, manualNz, [manualCellSize, manualCellSize, manualCellSize]);
+  return createGrid(manualNx, manualNy, manualNz, [cellWidth, cellWidth, cellWidth]);
 });
 
 let latticeProps = $derived.by<LatticeProperties | null>(() => {
@@ -190,6 +207,13 @@ async function runPipeline(gen: number): Promise<void> {
           domainMesh = meshFileName.toLowerCase().endsWith('.obj')
             ? parseOBJ(new TextDecoder().decode(meshFileBuffer!))
             : parseSTL(meshFileBuffer!);
+          // Scale mesh to target domainSize (mm)
+          if (meshNativeExtent > 0) {
+            const s = domainSize / meshNativeExtent;
+            const sp = new Float32Array(domainMesh!.positions.length);
+            for (let i = 0; i < sp.length; i++) sp[i] = domainMesh!.positions[i] * s;
+            domainMesh = createTriangleMesh(sp, domainMesh!.indices);
+          }
           domainObj = createMeshDomain(domainMesh!);
           return `${domainMesh!.vertexCount}v ${domainMesh!.triangleCount}t`;
         } catch { return 'error'; }
@@ -231,7 +255,7 @@ async function runPipeline(gen: number): Promise<void> {
         if (gen !== pipelineGen) return;
 
         if (occ) {
-          classification = occupancyToClassification(occ, grid);
+          classification = occupancyToClassification(occ, grid, dObj);
           classMethod = 'gpu';
           console.log(`[pipeline] GPU voxelizer complete: ${(performance.now() - tClassify).toFixed(1)} ms`);
         } else {
@@ -243,7 +267,7 @@ async function runPipeline(gen: number): Promise<void> {
               grid.origin[0], grid.origin[1], grid.origin[2],
               grid.cellSize[0], grid.nx, grid.ny, grid.nz,
             );
-            if (occCpu) { classification = occupancyToClassification(occCpu, grid); classMethod = 'cpu-wasm'; }
+            if (occCpu) { classification = occupancyToClassification(occCpu, grid, dObj); classMethod = 'cpu-wasm'; }
           }
           if (!classification) { classification = classifyCells(graph, dObj); classMethod = 'js-bvh'; }
         }
@@ -256,7 +280,7 @@ async function runPipeline(gen: number): Promise<void> {
               grid.origin[0], grid.origin[1], grid.origin[2],
               grid.cellSize[0], grid.nx, grid.ny, grid.nz,
             );
-            if (occ) { classification = occupancyToClassification(occ, grid); classMethod = 'cpu-wasm'; }
+            if (occ) { classification = occupancyToClassification(occ, grid, dObj); classMethod = 'cpu-wasm'; }
           }
           if (!classification) { classification = classifyCells(graph, domainObj!); classMethod = 'js-bvh'; }
           stages[stages.length - 1].method = classMethod;
@@ -266,7 +290,8 @@ async function runPipeline(gen: number): Promise<void> {
 
       time('Trim', 'intersect', () => {
         applyClassification(graph, classification!);
-        trim = trimBeams(graph, domainObj!);
+        reclassifyLeakedBeams(graph, dObj, dm);
+        trim = trimBeams(graph, dObj);
         let tc = 0, rc = 0;
         for (let b = 0; b < graph.beamCount; b++) {
           if (graph.beamFlags[b] & 0b00000100) tc++;
@@ -339,23 +364,20 @@ async function runPipeline(gen: number): Promise<void> {
   };
 }
 
-// Reactive effect: re-run pipeline when any dependency changes.
-// Uses $effect.root() since this is a module-level store, not a component.
-$effect.root(() => {
-  $effect(() => {
-    // Touch all reactive deps so Svelte tracks them
-    const _deps = [
-      unitCellId, rStar, activeGrid,
-      domainEnabled, domainSource, domainShape, domainRadius,
-      meshFileBuffer, meshFileName,
-      skinEnabled, voxelizerTierOverride,
-    ];
-    void _deps;
+/** Mark params as dirty — called by all parameter setters. */
+function markDirty() { paramsDirty = true; }
 
-    const gen = ++pipelineGen;
-    runPipeline(gen);
-  });
-});
+/** Commit current params and run the pipeline. */
+export async function commitAndGenerate(): Promise<void> {
+  paramsDirty = false;
+  const gen = ++pipelineGen;
+  await runPipeline(gen);
+}
+
+export function isParamsDirty(): boolean { return paramsDirty; }
+
+// Auto-generate on first load (once WASM is ready or after a tick)
+setTimeout(() => commitAndGenerate(), 0);
 
 // ─── Public API: outputs ────────────────────────────────────────────────────
 
@@ -370,38 +392,61 @@ export function getAbsoluteRadius(): number { return rStar * activeGrid.cellSize
 // ─── Public API: parameters ─────────────────────────────────────────────────
 
 export function getUnitCellId(): string { return unitCellId; }
-export function setUnitCellId(id: string) { unitCellId = id; }
+export function setUnitCellId(id: string) { unitCellId = id; markDirty(); }
 export function getUnitCellIds(): readonly string[] { return UNIT_CELL_IDS; }
 
-export function getResolution(): number { return resolution; }
-export function setResolution(v: number) { resolution = Math.max(2, Math.round(v)); }
+export function getCellWidth(): number { return cellWidth; }
+export function setCellWidth(v: number) { cellWidth = Math.max(0.001, v); markDirty(); }
+
+/** Returns {min, max, step} for the l_c slider, scaled to domain extent. */
+export function getCellWidthRange(): { min: number; max: number; step: number } {
+  if (domainEnabled) {
+    // Use domainSize for file meshes, domainRadius*2 for generated shapes
+    const extent = (domainSource === 'file' && meshNativeExtent > 0)
+      ? domainSize
+      : domainRadius * 2;
+    if (extent > 0) {
+      const min = +(extent / 60).toPrecision(1);
+      const max = +(extent / 2).toPrecision(2);
+      const step = +(extent / 200).toPrecision(1);
+      return { min: Math.max(0.001, min), max, step: Math.max(0.001, step) };
+    }
+  }
+  return { min: 0.01, max: 10, step: 0.05 };
+}
 export function getPadding(): number { return padding; }
-export function setPadding(v: number) { padding = Math.max(0, Math.round(v)); }
+export function setPadding(v: number) { padding = Math.max(0, Math.round(v)); markDirty(); }
 
 export function getManualNx(): number { return manualNx; }
 export function getManualNy(): number { return manualNy; }
 export function getManualNz(): number { return manualNz; }
-export function setManualNx(v: number) { manualNx = Math.max(1, Math.round(v)); }
-export function setManualNy(v: number) { manualNy = Math.max(1, Math.round(v)); }
-export function setManualNz(v: number) { manualNz = Math.max(1, Math.round(v)); }
-export function getManualCellSize(): number { return manualCellSize; }
-export function setManualCellSize(v: number) { manualCellSize = Math.max(0.01, v); }
+export function setManualNx(v: number) { manualNx = Math.max(1, Math.round(v)); markDirty(); }
+export function setManualNy(v: number) { manualNy = Math.max(1, Math.round(v)); markDirty(); }
+export function setManualNz(v: number) { manualNz = Math.max(1, Math.round(v)); markDirty(); }
 
 export function getRStar(): number { return rStar; }
-export function setRStar(v: number) { rStar = Math.max(0.01, Math.min(0.45, v)); }
+export function setRStar(v: number) { rStar = Math.max(0.01, Math.min(0.45, v)); markDirty(); }
 
 export function getDomainEnabled(): boolean { return domainEnabled; }
-export function setDomainEnabled(v: boolean) { domainEnabled = v; }
+export function setDomainEnabled(v: boolean) { domainEnabled = v; markDirty(); }
 export function getDomainShape(): 'box' | 'sphere' { return domainShape; }
-export function setDomainShape(v: 'box' | 'sphere') { domainShape = v; }
+export function setDomainShape(v: 'box' | 'sphere') { domainShape = v; markDirty(); }
 export function getDomainRadius(): number { return domainRadius; }
-export function setDomainRadius(v: number) { domainRadius = Math.max(0.1, v); }
+export function setDomainRadius(v: number) { domainRadius = Math.max(0.1, v); markDirty(); }
+export function getDomainSize(): number { return domainSize; }
+export function setDomainSize(v: number) {
+  const prev = domainSize;
+  domainSize = Math.max(0.1, v);
+  // Scale cellWidth proportionally so the cell count stays roughly the same
+  if (prev > 0) cellWidth = +(cellWidth * domainSize / prev).toPrecision(3);
+  markDirty();
+}
 export function getDomainSource(): 'generated' | 'file' { return domainSource; }
-export function setDomainSource(v: 'generated' | 'file') { domainSource = v; }
+export function setDomainSource(v: 'generated' | 'file') { domainSource = v; markDirty(); }
 export function getMeshFileName(): string { return meshFileName; }
 export function getMeshInfo(): { vertices: number; triangles: number } | null { return meshInfo; }
 export function getSkinEnabled(): boolean { return skinEnabled; }
-export function setSkinEnabled(v: boolean) { skinEnabled = v; }
+export function setSkinEnabled(v: boolean) { skinEnabled = v; markDirty(); }
 
 export function setMeshFile(buffer: ArrayBuffer, name: string) {
   meshFileBuffer = buffer;
@@ -411,10 +456,20 @@ export function setMeshFile(buffer: ArrayBuffer, name: string) {
       ? parseOBJ(new TextDecoder().decode(buffer))
       : parseSTL(buffer);
     meshInfo = { vertices: mesh.vertexCount, triangles: mesh.triangleCount };
+    const rx = mesh.aabbMax[0] - mesh.aabbMin[0];
+    const ry = mesh.aabbMax[1] - mesh.aabbMin[1];
+    const rz = mesh.aabbMax[2] - mesh.aabbMin[2];
+    meshNativeExtent = Math.max(rx, ry, rz);
+    // Auto-set cellWidth to ~8 cells across target domainSize
+    if (domainSize > 0) {
+      cellWidth = +(domainSize / 8).toPrecision(2);
+    }
   } catch { meshInfo = null; }
+  // File upload is an explicit action — auto-generate
+  commitAndGenerate();
 }
 
-// ─── Public API: render layers ──────────────────────────────────────────────
+// ─── Public API: render layers & quality ──────────────────────────────────────────────
 
 export function getShowBeams(): boolean { return showBeams; }
 export function setShowBeams(v: boolean) { showBeams = v; }
@@ -429,17 +484,25 @@ export function setShowAxes(v: boolean) { showAxes = v; }
 export function getDomainDisplayMode(): 'solid' | 'wireframe' | 'transparent' { return domainDisplayMode; }
 export function setDomainDisplayMode(v: 'solid' | 'wireframe' | 'transparent') { domainDisplayMode = v; }
 export function getVoxelizerTierOverride(): 'auto' | 'gpu' | 'cpu-wasm' | 'js' { return voxelizerTierOverride; }
-export function setVoxelizerTierOverride(v: 'auto' | 'gpu' | 'cpu-wasm' | 'js') { voxelizerTierOverride = v; }
+export function setVoxelizerTierOverride(v: 'auto' | 'gpu' | 'cpu-wasm' | 'js') { voxelizerTierOverride = v; markDirty(); }
+
+export function getRenderCylinderSegments(): number { return renderCylinderSegments; }
+export function setRenderCylinderSegments(v: number) { renderCylinderSegments = Math.max(3, Math.min(32, Math.round(v))); console.log('[store] renderCylinderSegments =', renderCylinderSegments); }
+export function getRenderFlatShading(): boolean { return renderFlatShading; }
+export function setRenderFlatShading(v: boolean) { renderFlatShading = v; }
+export function getRenderWireframe(): boolean { return renderWireframe; }
+export function setRenderWireframe(v: boolean) { renderWireframe = v; }
 
 // ─── Public API: export ─────────────────────────────────────────────────────
 
 let exportInProgress = $state(false);
 let exportMcDensity = $state<number | null>(null);
 let exportFilletK   = $state<number | null>(null);
+let exportCylinderSegments = $state(16);
 let exportProgress  = $state(0);
 let exportPhase     = $state('');
 let exportTierUsed  = $state<'gpu' | 'js' | 'direct' | 'csg' | ''>('');
-let exportTierOverride = $state<'auto' | 'gpu' | 'js' | 'direct' | 'csg'>('auto');
+let exportTierOverride = $state<'auto' | 'gpu' | 'js' | 'direct' | 'csg'>('direct');
 let lastExportStatus = $state<'ok' | 'error' | ''>('');
 let lastExportSummary = $state('');
 
@@ -455,6 +518,8 @@ export function getExportFilletK(): number | null { return exportFilletK; }
 export function setExportFilletK(v: number | null) { exportFilletK = v; }
 export function getExportTierOverride(): 'auto' | 'gpu' | 'js' | 'direct' | 'csg' { return exportTierOverride; }
 export function setExportTierOverride(v: 'auto' | 'gpu' | 'js' | 'direct' | 'csg') { exportTierOverride = v; }
+export function getExportCylinderSegments(): number { return exportCylinderSegments; }
+export function setExportCylinderSegments(v: number) { exportCylinderSegments = Math.max(6, Math.min(64, Math.round(v))); }
 
 /** Auto MC density: ≥ 3 samples across strut diameter. */
 export function getAutoMcDensity(): number {
@@ -528,6 +593,7 @@ export async function triggerExport(): Promise<void> {
         absoluteRadius: getAbsoluteRadius(),
         mcDensity: exportMcDensity ?? undefined,
         filletK: exportFilletK ?? undefined,
+        segments: exportCylinderSegments,
         wasmUrl: useCsg ? `${import.meta.env.BASE_URL}manifold.wasm` : undefined,
         onProgress,
       });

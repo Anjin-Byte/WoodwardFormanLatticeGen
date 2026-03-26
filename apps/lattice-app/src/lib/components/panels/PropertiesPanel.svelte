@@ -2,14 +2,14 @@
   import { Section, ScrubField, CheckboxRow, ToggleGroup, SelectField, ActionButton, PropRow, StatusIndicator } from '@gestalt/phi';
   import {
     getUnitCellId, setUnitCellId, getUnitCellIds,
-    getResolution, setResolution,
+    getCellWidth, setCellWidth, getCellWidthRange,
     getPadding, setPadding,
     getManualNx, getManualNy, getManualNz, setManualNx, setManualNy, setManualNz,
-    getManualCellSize, setManualCellSize,
     getRStar, setRStar,
     getDomainEnabled, setDomainEnabled,
     getDomainShape, setDomainShape,
     getDomainRadius, setDomainRadius,
+    getDomainSize, setDomainSize,
     getDomainSource, setDomainSource,
     getMeshFileName, getMeshInfo, setMeshFile,
     getSkinEnabled, setSkinEnabled,
@@ -17,14 +17,16 @@
     getExportFilletK, setExportFilletK, getAutoMcDensity, triggerExport,
     getExportProgress, getExportPhase, getExportTierUsed, getExportTierAvailable,
     getExportTierOverride, setExportTierOverride,
+    getExportCylinderSegments, setExportCylinderSegments,
     getLastExportStatus, getLastExportSummary,
+    commitAndGenerate, isParamsDirty,
   } from '$lib/stores/lattice.svelte';
 
   interface SampleModel { id: string; label: string; file: string }
   let sampleModels = $state<SampleModel[]>([]);
   let sampleLoading = $state(false);
+  let fileInput: HTMLInputElement;
 
-  // Load sample model manifest on first render
   (async () => {
     try {
       const base = import.meta.env.BASE_URL;
@@ -57,9 +59,40 @@
       sampleLoading = false;
     }
   }
+
+  const exportPipelineOptions = $derived([
+    { value: 'auto', label: getExportTierAvailable() === 'gpu' ? 'Auto (GPU)' : 'Auto (JS)' },
+    { value: 'direct', label: 'Direct' },
+    { value: 'csg', label: 'CSG' },
+    { value: 'gpu', label: 'SDF - GPU' },
+    { value: 'js', label: 'SDF - JS' },
+  ]);
+
+  const isSdfPipeline = $derived(
+    getExportTierOverride() === 'auto' || getExportTierOverride() === 'gpu' || getExportTierOverride() === 'js'
+  );
+  const isMeshPipeline = $derived(
+    getExportTierOverride() === 'direct' || getExportTierOverride() === 'csg'
+  );
 </script>
 
 <div class="panel">
+
+  <!-- Generate button — always visible at top -->
+  <div class="generate-row">
+    <ActionButton
+      onclick={commitAndGenerate}
+      disabled={getExportInProgress()}
+      fullWidth
+    >
+      {#if !isParamsDirty()}
+        Generate Lattice
+      {:else}
+        <StatusIndicator status="ok" pulse={true} />
+        Generate Lattice
+      {/if}
+    </ActionButton>
+  </div>
 
   <Section sectionId="prop-lattice" title="Lattice">
     <SelectField
@@ -67,22 +100,19 @@
       value={getUnitCellId()}
       onValueChange={setUnitCellId}
     />
+    <ScrubField label="r*" value={getRStar()} min={0.01} max={0.45} step={0.005} decimals={3} onValueChange={setRStar} />
   </Section>
 
   <Section sectionId="prop-grid" title="Grid">
+    {@const lcRange = getCellWidthRange()}
+    <ScrubField label="l_c (mm)" value={getCellWidth()} min={lcRange.min} max={lcRange.max} step={lcRange.step} decimals={3} onValueChange={setCellWidth} />
     {#if getDomainEnabled()}
-      <ScrubField label="Resolution" value={getResolution()} min={2} max={60} step={1} decimals={0} onValueChange={setResolution} />
       <ScrubField label="Padding" value={getPadding()} min={0} max={5} step={1} decimals={0} onValueChange={setPadding} />
     {:else}
-      <ScrubField label="X" value={getManualNx()} min={1} max={100} step={1} decimals={0} onValueChange={setManualNx} />
-      <ScrubField label="Y" value={getManualNy()} min={1} max={100} step={1} decimals={0} onValueChange={setManualNy} />
-      <ScrubField label="Z" value={getManualNz()} min={1} max={100} step={1} decimals={0} onValueChange={setManualNz} />
-      <ScrubField label="Cell Size" value={getManualCellSize()} min={0.01} max={10} step={0.05} decimals={3} onValueChange={setManualCellSize} />
+      <ScrubField label="Nx" value={getManualNx()} min={1} max={100} step={1} decimals={0} onValueChange={setManualNx} />
+      <ScrubField label="Ny" value={getManualNy()} min={1} max={100} step={1} decimals={0} onValueChange={setManualNy} />
+      <ScrubField label="Nz" value={getManualNz()} min={1} max={100} step={1} decimals={0} onValueChange={setManualNz} />
     {/if}
-  </Section>
-
-  <Section sectionId="prop-strut" title="Strut">
-    <ScrubField label="r*" value={getRStar()} min={0.01} max={0.45} step={0.005} decimals={3} onValueChange={setRStar} />
   </Section>
 
   <Section sectionId="prop-domain" title="Domain">
@@ -91,7 +121,7 @@
     {#if getDomainEnabled()}
       <ToggleGroup
         label="Source"
-        options={[{ value: 'generated', label: 'Generated' }, { value: 'file', label: 'File' }]}
+        options={[{ value: 'generated', label: 'Generated' }, { value: 'file', label: 'Mesh File' }]}
         value={getDomainSource()}
         onValueChange={(v) => setDomainSource(v as 'generated' | 'file')}
       />
@@ -103,60 +133,73 @@
           value={getDomainShape()}
           onValueChange={(v) => setDomainShape(v as 'box' | 'sphere')}
         />
-        <ScrubField label="Radius" value={getDomainRadius()} min={0.1} max={20} step={0.1} decimals={2} onValueChange={setDomainRadius} />
+        <ScrubField label="Radius (mm)" value={getDomainRadius()} min={0.1} max={20} step={0.1} decimals={2} onValueChange={setDomainRadius} />
       {:else}
+        <input bind:this={fileInput} type="file" accept=".stl,.obj" onchange={handleFileUpload} class="hidden-input" />
+        <ActionButton onclick={() => fileInput?.click()} fullWidth>
+          {getMeshFileName() || 'Browse...'}
+        </ActionButton>
         {#if sampleModels.length > 0}
           <SelectField
             options={[
-              { value: '', label: sampleLoading ? 'Loading...' : 'Sample models...' },
+              { value: '', label: sampleLoading ? 'Loading...' : 'Load sample...' },
               ...sampleModels.map(m => ({ value: m.id, label: m.label })),
             ]}
             value=""
             onValueChange={(v) => { if (v) loadSampleModel(v); }}
           />
         {/if}
-        <div class="file-row">
-          <input type="file" accept=".stl,.obj" onchange={handleFileUpload} />
-        </div>
-        {#if getMeshFileName()}
-          <p class="file-name">{getMeshFileName()}</p>
+        {#if getMeshInfo()}
+          {@const info = getMeshInfo()!}
+          <PropRow label="Mesh" value={`${info.vertices.toLocaleString()}v / ${info.triangles.toLocaleString()}t`} />
+          <ScrubField label="Size (mm)" value={getDomainSize()} min={1} max={500} step={1} decimals={1} onValueChange={setDomainSize} />
         {/if}
       {/if}
 
+      <div class="separator"></div>
       <CheckboxRow label="Skin" checked={getSkinEnabled()} onchange={setSkinEnabled} />
     {/if}
   </Section>
 
   <Section sectionId="prop-export" title="Export">
-    <ScrubField
-      label="Density"
-      value={getExportMcDensity() ?? getAutoMcDensity()}
-      min={4} max={60} step={1} decimals={0}
-      onValueChange={setExportMcDensity}
-    />
-    <ScrubField
-      label="Fillet"
-      value={getExportFilletK() ?? 0.5}
-      min={0} max={2} step={0.05} decimals={2}
-      onValueChange={setExportFilletK}
-    />
-    <ToggleGroup
-      label="Pipeline"
-      options={[
-        { value: 'direct', label: 'Direct' },
-        { value: 'csg', label: 'CSG' },
-        { value: 'auto', label: getExportTierAvailable() === 'gpu' ? 'Auto (GPU)' : 'Auto (JS)' },
-        { value: 'gpu', label: 'GPU' },
-        { value: 'js', label: 'JS' },
-      ]}
+    <SelectField
+      options={exportPipelineOptions}
       value={getExportTierOverride()}
       onValueChange={(v) => setExportTierOverride(v as 'auto' | 'gpu' | 'js' | 'direct' | 'csg')}
     />
 
+    {#if isSdfPipeline}
+      <ScrubField
+        label="MC Density"
+        value={getExportMcDensity() ?? getAutoMcDensity()}
+        min={4} max={60} step={1} decimals={0}
+        onValueChange={setExportMcDensity}
+      />
+      <ScrubField
+        label="Fillet"
+        value={getExportFilletK() ?? 0.5}
+        min={0} max={2} step={0.05} decimals={2}
+        onValueChange={setExportFilletK}
+      />
+    {/if}
+
+    {#if isMeshPipeline}
+      <ScrubField
+        label="Segments"
+        value={getExportCylinderSegments()}
+        min={6} max={64} step={1} decimals={0}
+        onValueChange={setExportCylinderSegments}
+      />
+    {/if}
+
     {#if getExportInProgress()}
       {@const phase = getExportPhase()}
       {@const pct = getExportProgress()}
-      {@const phaseLabels = { accel: 'Building accel', sdf: 'SDF evaluation', mc: 'Marching cubes', stl: 'Writing STL', gpu: 'GPU compute', tessellate: 'Tessellating', init: 'Loading CSG engine', union: 'Boolean union' } as Record<string, string>}
+      {@const phaseLabels = {
+        accel: 'Building accel', sdf: 'SDF evaluation', mc: 'Marching cubes',
+        stl: 'Writing STL', gpu: 'GPU compute', tessellate: 'Tessellating',
+        init: 'Loading CSG engine', union: 'Boolean union',
+      } as Record<string, string>}
       {@const indeterminate = (phase === 'gpu' || phase === 'union') && pct < 1}
       <div class="export-progress">
         <div class="progress-header">
@@ -175,7 +218,7 @@
 
     <ActionButton
       onclick={triggerExport}
-      disabled={getExportInProgress()}
+      disabled={getExportInProgress() || isParamsDirty()}
       fullWidth
     >
       {#if getExportInProgress()}
@@ -207,22 +250,22 @@
     padding: 6px 8px;
   }
 
-  .file-row {
-    padding: 4px 0;
+  .generate-row {
+    padding: 4px 0 8px;
   }
 
-  .file-row input[type="file"] {
-    font-size: 10px;
-    color: var(--text-mid, #ccc);
-    width: 100%;
+  .generate-row :global(button) {
+    font-weight: 600;
   }
 
-  .file-name {
-    font-family: var(--font-mono, monospace);
-    font-size: 10px;
-    color: var(--text-faint, #666);
-    margin: 2px 0;
-    word-break: break-all;
+  .hidden-input {
+    display: none;
+  }
+
+  .separator {
+    height: 1px;
+    background: var(--stroke-lo, oklch(1 0 0 / 0.06));
+    margin: 6px 0;
   }
 
   .export-progress {

@@ -26,7 +26,7 @@ export class Viewer {
     this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 
     this.scene = new THREE.Scene();
-    this.scene.background = new THREE.Color(options.background ?? 0x1a1a2e);
+    this.scene.background = new THREE.Color(options.background ?? 0x1a1c24);
 
     this.camera = new THREE.PerspectiveCamera(50, 1, 0.1, 1000);
     this.camera.position.set(4, 3, 4);

@@ -34,14 +34,14 @@ export { buildRenderData, computeBeamTransform, getEffectivePosition } from './r
 export { createBoxDomain, createSphereDomain } from './domain.js';
 export { createMeshDomain } from './mesh-domain.js';
 export { buildDomainIndex } from './domain-index.js';
-export { classifyCells, applyClassification, trimBeams } from './boundary.js';
+export { classifyCells, applyClassification, trimBeams, reclassifyLeakedBeams } from './boundary.js';
 export { computeLatticeProperties, computePressureDrop } from './derived-properties.js';
 export type { StrutShape } from './derived-properties.js';
 export { createTriangleMesh, tessellateBox, tessellateSphere, triangleBounds } from './triangle-mesh.js';
 export { generateSkin } from './skin.js';
 export { parseSTL } from './stl-parser.js';
 export { parseOBJ } from './obj-parser.js';
-export { buildBVH, bvhRaycast, bvhIntersectSegment } from './bvh.js';
+export { buildBVH, bvhRaycast, bvhIntersectSegment, bvhSegmentCrossingCount } from './bvh.js';
 export type { BVH } from './bvh.js';
 export { occupancyToClassification } from './voxelize-wasm.js';
 export { clipBoundaryBeams } from './clip.js';

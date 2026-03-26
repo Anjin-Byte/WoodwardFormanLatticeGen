@@ -287,3 +287,62 @@ export function bvhIntersectSegment(
 
   return nearest;
 }
+
+/**
+ * Count how many times a segment from p0 to p1 crosses the mesh surface.
+ * Used to detect beams that bridge through thin features (both endpoints
+ * inside the mesh, but the segment exits and re-enters).
+ */
+export function bvhSegmentCrossingCount(
+  bvh: BVH,
+  mesh: TriangleMesh,
+  p0x: number, p0y: number, p0z: number,
+  p1x: number, p1y: number, p1z: number,
+): number {
+  if (bvh.nodeCount === 0) return 0;
+
+  const dx = p1x - p0x, dy = p1y - p0y, dz = p1z - p0z;
+  const invDx = 1 / dx, invDy = 1 / dy, invDz = 1 / dz;
+
+  const stack = new Int32Array(64);
+  let stackPtr = 0;
+  stack[stackPtr++] = 0;
+  let count = 0;
+
+  while (stackPtr > 0) {
+    const nodeIdx = stack[--stackPtr];
+    const base = nodeIdx * 8;
+    const minX = bvh.nodes[base], minY = bvh.nodes[base + 1], minZ = bvh.nodes[base + 2];
+    const maxX = bvh.nodes[base + 4], maxY = bvh.nodes[base + 5], maxZ = bvh.nodes[base + 6];
+
+    if (!intersectsAABB(p0x, p0y, p0z, invDx, invDy, invDz, minX, minY, minZ, maxX, maxY, maxZ, 1)) {
+      continue;
+    }
+
+    const leftOrStart = bvh.nodes[base + 3];
+    const rightOrCount = bvh.nodes[base + 7];
+
+    if (rightOrCount < 0) {
+      const triStart = leftOrStart | 0;
+      const triCount = (-rightOrCount) | 0;
+      for (let i = triStart; i < triStart + triCount; i++) {
+        const t = bvh.triOrder[i];
+        const i0 = mesh.indices[t * 3], i1 = mesh.indices[t * 3 + 1], i2 = mesh.indices[t * 3 + 2];
+        const hit = rayTriangleIntersect(
+          p0x, p0y, p0z, dx, dy, dz,
+          mesh.positions[i0 * 3], mesh.positions[i0 * 3 + 1], mesh.positions[i0 * 3 + 2],
+          mesh.positions[i1 * 3], mesh.positions[i1 * 3 + 1], mesh.positions[i1 * 3 + 2],
+          mesh.positions[i2 * 3], mesh.positions[i2 * 3 + 1], mesh.positions[i2 * 3 + 2],
+        );
+        if (hit !== null && hit > 1e-6 && hit < 1 - 1e-6) {
+          count++;
+        }
+      }
+    } else {
+      stack[stackPtr++] = leftOrStart | 0;
+      stack[stackPtr++] = rightOrCount | 0;
+    }
+  }
+
+  return count;
+}

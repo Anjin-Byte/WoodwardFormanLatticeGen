@@ -1,14 +1,24 @@
 import * as THREE from 'three';
 import type { BeamRenderData } from '@lattice/core';
 
-const CYLINDER_SEGMENTS = 8;
+export interface LatticeMeshOptions {
+  segments?: number;
+  flatShading?: boolean;
+  wireframe?: boolean;
+  color?: number;
+}
 
 export function createLatticeMesh(
   data: BeamRenderData,
-  material?: THREE.Material,
+  options?: LatticeMeshOptions,
 ): THREE.InstancedMesh {
-  const geo = new THREE.CylinderGeometry(1, 1, 1, CYLINDER_SEGMENTS, 1);
-  const mat = material ?? new THREE.MeshStandardMaterial({ color: 0x6c63ff });
+  const segments = options?.segments ?? 8;
+  const flatShading = options?.flatShading ?? false;
+  const wireframe = options?.wireframe ?? false;
+  const color = options?.color ?? 0x6c63ff;
+
+  const geo = new THREE.CylinderGeometry(1, 1, 1, segments, 1);
+  const mat = new THREE.MeshStandardMaterial({ color, flatShading, wireframe });
   const mesh = new THREE.InstancedMesh(geo, mat, data.count);
 
   const tempMatrix = new THREE.Matrix4();
@@ -29,7 +39,6 @@ export function updateLatticeMesh(
   data: BeamRenderData,
 ): boolean {
   if (mesh.count !== data.count) {
-    // Count changed — caller must dispose and create a new mesh
     return false;
   }
 
