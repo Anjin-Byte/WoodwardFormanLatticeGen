@@ -1,29 +1,13 @@
 <script lang="ts">
   import { getHint } from '$lib/stores/status';
-  import { StatusIndicator } from '@gestalt/phi';
-  import { getPipelineStats, getExportTierAvailable } from '$lib/stores/lattice.svelte';
-
-  const tierLabel: Record<string, string> = {
-    gpu: 'GPU',
-    'cpu-wasm': 'CPU',
-    js: 'JS',
-  };
+  import { getPipelineStats } from '$lib/stores/lattice.svelte';
 </script>
 
 <div class="status-bar">
   <span class="hint">{getHint() || ''}</span>
   <div class="right">
     {#if getPipelineStats()}
-      {@const s = getPipelineStats()!}
-      <StatusIndicator
-        status={s.voxelizerTier === 'gpu' ? 'ok' : s.voxelizerTier === 'cpu-wasm' ? 'ok' : 'idle'}
-        label={`Vox ${tierLabel[s.voxelizerTier] ?? 'JS'}`}
-      />
-      <StatusIndicator
-        status={getExportTierAvailable() === 'gpu' ? 'ok' : 'idle'}
-        label={`SDF ${getExportTierAvailable() === 'gpu' ? 'GPU' : 'JS'}`}
-      />
-      <span class="timing">{s.pipelineTimeMs.toFixed(1)} ms</span>
+      <span class="timing">{getPipelineStats()!.pipelineTimeMs.toFixed(1)} ms</span>
     {/if}
   </div>
 </div>
