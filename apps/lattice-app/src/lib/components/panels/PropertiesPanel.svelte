@@ -20,12 +20,42 @@
     getLastExportStatus, getLastExportSummary,
   } from '$lib/stores/lattice.svelte';
 
+  interface SampleModel { id: string; label: string; file: string }
+  let sampleModels = $state<SampleModel[]>([]);
+  let sampleLoading = $state(false);
+
+  // Load sample model manifest on first render
+  (async () => {
+    try {
+      const base = import.meta.env.BASE_URL;
+      const res = await fetch(`${base}models/index.json`);
+      sampleModels = await res.json();
+    } catch { /* no samples available */ }
+  })();
+
   async function handleFileUpload(e: Event) {
     const input = e.target as HTMLInputElement;
     const file = input.files?.[0];
     if (!file) return;
     const buffer = await file.arrayBuffer();
     setMeshFile(buffer, file.name);
+  }
+
+  async function loadSampleModel(id: string) {
+    const model = sampleModels.find(m => m.id === id);
+    if (!model) return;
+    sampleLoading = true;
+    try {
+      const base = import.meta.env.BASE_URL;
+      const res = await fetch(`${base}${model.file}`);
+      const buffer = await res.arrayBuffer();
+      const fileName = model.file.split('/').pop() ?? model.file;
+      setMeshFile(buffer, fileName);
+    } catch (e) {
+      console.error('[sample] Failed to load model:', e);
+    } finally {
+      sampleLoading = false;
+    }
   }
 </script>
 
@@ -75,6 +105,16 @@
         />
         <ScrubField label="Radius" value={getDomainRadius()} min={0.1} max={20} step={0.1} decimals={2} onValueChange={setDomainRadius} />
       {:else}
+        {#if sampleModels.length > 0}
+          <SelectField
+            options={[
+              { value: '', label: sampleLoading ? 'Loading...' : 'Sample models...' },
+              ...sampleModels.map(m => ({ value: m.id, label: m.label })),
+            ]}
+            value=""
+            onValueChange={(v) => { if (v) loadSampleModel(v); }}
+          />
+        {/if}
         <div class="file-row">
           <input type="file" accept=".stl,.obj" onchange={handleFileUpload} />
         </div>
