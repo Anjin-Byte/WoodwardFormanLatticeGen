@@ -162,7 +162,7 @@
     geo.computeVertexNormals();
 
     const mesh = new THREE.Mesh(geo, new THREE.MeshStandardMaterial({
-      color: 0x6c63ff, side: THREE.DoubleSide, flatShading: true,
+      color: 0xff8c00, side: THREE.DoubleSide, flatShading: true,
     }));
     mesh.castShadow = true;
     mesh.receiveShadow = true;
