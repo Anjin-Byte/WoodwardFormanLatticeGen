@@ -59,6 +59,8 @@ export { exportLatticeGpu } from './export-pipeline-gpu.js';
 export { exportLatticeDirect, tessellateCylinder } from './export-direct.js';
 export type { DirectExportOptions } from './export-direct.js';
 export { exportLatticeCsg } from './export-csg.js';
+export { intersectLatticeWithDomain } from './lattice-intersect.js';
+export type { IntersectOptions, IntersectResult } from './lattice-intersect.js';
 export type { CsgExportOptions } from './export-csg.js';
 export type { GpuSdfExporterHandle, GpuExportOptions } from './export-pipeline-gpu.js';
 export type { ExportOptions, ExportResult } from './export-pipeline.js';

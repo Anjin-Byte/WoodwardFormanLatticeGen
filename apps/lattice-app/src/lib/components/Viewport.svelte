@@ -3,6 +3,7 @@
   import { Viewer, createLatticeMesh, updateLatticeMesh } from '@lattice/viewer';
   import {
     getLatticeRenderData, getDomainTriangleMesh, getActiveGrid, getClippedBeams,
+    getIntersectedMesh,
     getShowBeams, getShowSkin, getShowDomainMesh, getShowGridBounds, getShowAxes,
     getDomainDisplayMode,
     getRenderCylinderSegments, getRenderFlatShading, getRenderVersion,
@@ -16,6 +17,7 @@
   // Managed Three.js objects
   let latticeMesh: THREE.InstancedMesh | null = null;
   let clippedMeshObj: THREE.Mesh | null = null;
+  let intersectedMeshObj: THREE.Mesh | null = null;
   let domainMeshObj: THREE.Group | null = null;
   let gridBoundsObj: THREE.LineSegments | null = null;
   let axesObj: THREE.AxesHelper | null = null;
@@ -83,6 +85,45 @@
       clippedMeshObj.visible = getShowBeams();
       viewer.add(clippedMeshObj);
     }
+  });
+
+  // ─── Intersected lattice mesh (exact Manifold boolean) ───────────────────
+
+  $effect(() => {
+    if (intersectedMeshObj) intersectedMeshObj.visible = getShowBeams();
+  });
+
+  $effect(() => {
+    const mesh = getIntersectedMesh();
+    const flatShading = getRenderFlatShading();
+    const _v = getRenderVersion();
+    if (!viewer) return;
+
+    if (intersectedMeshObj) {
+      viewer.remove(intersectedMeshObj);
+      intersectedMeshObj.geometry.dispose();
+      (intersectedMeshObj.material as THREE.Material).dispose();
+      intersectedMeshObj = null;
+    }
+
+    if (mesh && mesh.triangleCount > 0) {
+      const geo = new THREE.BufferGeometry();
+      geo.setAttribute('position', new THREE.Float32BufferAttribute(mesh.positions, 3));
+      geo.setIndex(new THREE.Uint32BufferAttribute(mesh.indices, 1));
+      geo.computeVertexNormals();
+
+      intersectedMeshObj = new THREE.Mesh(geo, new THREE.MeshStandardMaterial({
+        color: 0x6c63ff, side: THREE.DoubleSide, flatShading,
+      }));
+      intersectedMeshObj.castShadow = true;
+      intersectedMeshObj.receiveShadow = true;
+      intersectedMeshObj.visible = getShowBeams();
+      viewer.add(intersectedMeshObj);
+    }
+
+    // Hide instanced + clipped when intersected mesh is active
+    if (mesh && latticeMesh) latticeMesh.visible = false;
+    if (mesh && clippedMeshObj) clippedMeshObj.visible = false;
   });
 
   // ─── Domain mesh ──────────────────────────────────────────────────────────

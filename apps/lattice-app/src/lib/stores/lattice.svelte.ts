@@ -7,7 +7,7 @@ import {
   generateSkin,
   computeLatticeProperties,
   occupancyToClassification,
-  clipBoundaryBeams, buildDomainIndex,
+  clipBoundaryBeams, buildDomainIndex, intersectLatticeWithDomain,
   parseSTL, parseOBJ,
   UNIT_CELL_IDS, CellClass,
 } from '@lattice/core';
@@ -87,6 +87,7 @@ interface PipelineResult {
   stats: PipelineStats;
   domainMesh: TriangleMesh | null;
   clippedBeams: ClippedBeamResult[];
+  intersectedMesh: TriangleMesh | null;
   graph: import('@lattice/core').BeamGraph;
   trim: import('@lattice/core').TrimResult | null;
   skin: import('@lattice/core').SkinGraph | null;
@@ -198,6 +199,7 @@ async function runPipeline(gen: number): Promise<void> {
   let skin: SkinGraph | null = null;
   let domainMesh: TriangleMesh | null = null;
   let domainObj: Domain | null = null;
+  let intersectedMesh: TriangleMesh | null = null;
   let classMethod = 'none';
 
   if (domainEnabled) {
@@ -237,82 +239,45 @@ async function runPipeline(gen: number): Promise<void> {
       });
     }
 
-    // Classify + trim
-    if (domainObj && domainMesh) {
-      const tier = resolveClassifyTier();
+    // Exact boolean intersection: tessellate all beams → intersect with domain
+    if (domainMesh) {
       const dm: TriangleMesh = domainMesh;
-      const dObj: Domain = domainObj;
-
-      if (tier === 'gpu') {
-        // Async GPU voxelization
-        const tClassify = performance.now();
-        console.log('[pipeline] Dispatching GPU voxelizer...');
-        const occ = await voxelizeMeshGpu(
-          dm.positions, dm.indices,
-          grid.origin[0], grid.origin[1], grid.origin[2],
-          grid.cellSize[0], grid.nx, grid.ny, grid.nz,
+      const tIntersect = performance.now();
+      console.log('[pipeline] Running Manifold boolean intersection...');
+      try {
+        const intersectResult = await intersectLatticeWithDomain(
+          graph, skin, dm,
+          {
+            segments: renderCylinderSegments,
+            wasmUrl: `${import.meta.env.BASE_URL}manifold.wasm`,
+          },
         );
-        // Check if a newer pipeline run superseded this one
         if (gen !== pipelineGen) return;
-
-        if (occ) {
-          classification = occupancyToClassification(occ, grid, dObj);
-          classMethod = 'gpu';
-          console.log(`[pipeline] GPU voxelizer complete: ${(performance.now() - tClassify).toFixed(1)} ms`);
-        } else {
-          // GPU returned null (failed) — fall back to CPU-WASM or JS
-          console.warn('[pipeline] GPU voxelizer returned null, falling back');
-          if (isWasmReady()) {
-            const occCpu = voxelizeMesh(
-              dm.positions, dm.indices,
-              grid.origin[0], grid.origin[1], grid.origin[2],
-              grid.cellSize[0], grid.nx, grid.ny, grid.nz,
-            );
-            if (occCpu) { classification = occupancyToClassification(occCpu, grid, dObj); classMethod = 'cpu-wasm'; }
-          }
-          if (!classification) { classification = classifyCells(graph, dObj); classMethod = 'js-bvh'; }
-        }
-        stages.push({ name: 'Classify', method: classMethod, timeMs: performance.now() - tClassify, output: classMethod });
-      } else {
-        time('Classify', '', () => {
-          if (tier === 'cpu-wasm') {
-            const occ = voxelizeMesh(
-              domainMesh!.positions, domainMesh!.indices,
-              grid.origin[0], grid.origin[1], grid.origin[2],
-              grid.cellSize[0], grid.nx, grid.ny, grid.nz,
-            );
-            if (occ) { classification = occupancyToClassification(occ, grid, dObj); classMethod = 'cpu-wasm'; }
-          }
-          if (!classification) { classification = classifyCells(graph, domainObj!); classMethod = 'js-bvh'; }
-          stages[stages.length - 1].method = classMethod;
-          return classMethod;
+        intersectedMesh = intersectResult.mesh;
+        classMethod = 'manifold';
+        stages.push({
+          name: 'Intersect', method: 'manifold',
+          timeMs: performance.now() - tIntersect,
+          output: `${intersectResult.mesh.triangleCount}t (tess:${intersectResult.timings.tessMs.toFixed(0)} union:${intersectResult.timings.unionMs.toFixed(0)} isect:${intersectResult.timings.intersectMs.toFixed(0)})`,
         });
-      }
-
-      time('Trim', 'intersect', () => {
-        applyClassification(graph, classification!);
-        reclassifyLeakedBeams(graph, dObj, dm);
-        trim = trimBeams(graph, dObj);
-        let tc = 0, rc = 0;
-        for (let b = 0; b < graph.beamCount; b++) {
-          if (graph.beamFlags[b] & 0b00000100) tc++;
-          if (graph.beamFlags[b] & 0b00010000) rc++;
+        console.log(`[pipeline] Manifold intersection complete: ${(performance.now() - tIntersect).toFixed(0)} ms, ${intersectResult.mesh.triangleCount} triangles`);
+      } catch (e) {
+        console.error('[pipeline] Manifold intersection failed, falling back to approximate:', e);
+        // Fallback: use old classify → trim → clip path
+        if (domainObj) {
+          classification = classifyCells(graph, domainObj);
+          classMethod = 'js-bvh (fallback)';
+          applyClassification(graph, classification);
+          trim = trimBeams(graph, domainObj);
+          stages.push({ name: 'Classify+Trim', method: classMethod, timeMs: performance.now() - tIntersect, output: 'fallback' });
         }
-        return `${tc} trimmed ${rc} removed`;
-      });
-
-      if (skinEnabled) {
-        time('Skin', 'face-stitch', () => {
-          skin = generateSkin(graph, trim!, cell, classification!);
-          return `${skin!.beamCount}b`;
-        });
       }
     }
   }
 
-  // Clip boundary beams
+  // Clip boundary beams (only needed in fallback mode — no intersected mesh)
   let clippedBeams: ClippedBeamResult[] = [];
-  if (domainObj && domainMesh && trim) {
+  if (!intersectedMesh && domainObj && domainMesh && trim) {
     time('Clip', 'csg', () => {
       const idx = buildDomainIndex(domainMesh!, grid);
       clippedBeams = clipBoundaryBeams(graph, domainObj!, domainMesh!, idx, trim, renderCylinderSegments);
@@ -359,6 +324,7 @@ async function runPipeline(gen: number): Promise<void> {
     },
     domainMesh,
     clippedBeams,
+    intersectedMesh,
     graph,
     trim,
     skin: skin as import('@lattice/core').SkinGraph | null,
@@ -387,6 +353,7 @@ export function getLatticeProperties(): LatticeProperties | null { return lattic
 export function getPipelineStats(): PipelineStats | null { return pipelineOutput?.stats ?? null; }
 export function getDomainTriangleMesh(): TriangleMesh | null { return pipelineOutput?.domainMesh ?? null; }
 export function getClippedBeams(): ClippedBeamResult[] { return pipelineOutput?.clippedBeams ?? []; }
+export function getIntersectedMesh(): TriangleMesh | null { return pipelineOutput?.intersectedMesh ?? null; }
 export function getActiveGrid(): LatticeGrid { return activeGrid; }
 export function getAbsoluteRadius(): number { return rStar * activeGrid.cellSize[0]; }
 
