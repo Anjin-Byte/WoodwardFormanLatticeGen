@@ -117,3 +117,101 @@ export function createSphereDomain(
     },
   };
 }
+
+export function createCylinderDomain(
+  center: [number, number, number],
+  radius: number,
+  length: number,
+): Domain {
+  const r2 = radius * radius;
+  const half = length * 0.5;
+
+  function radialDist2(x: number, y: number): number {
+    const dx = x - center[0];
+    const dy = y - center[1];
+    return dx * dx + dy * dy;
+  }
+
+  function isInside(x: number, y: number, z: number): boolean {
+    return radialDist2(x, y) <= r2 && Math.abs(z - center[2]) <= half;
+  }
+
+  function isValidSideHit(
+    p0x: number, p0y: number, p0z: number,
+    dx: number, dy: number, dz: number,
+    t: number,
+  ): boolean {
+    if (t < 0 || t > 1) return false;
+    const z = p0z + dz * t;
+    return Math.abs(z - center[2]) <= half;
+  }
+
+  function isValidCapHit(
+    p0x: number, p0y: number,
+    dx: number, dy: number,
+    t: number,
+  ): boolean {
+    if (t < 0 || t > 1) return false;
+    const x = p0x + dx * t;
+    const y = p0y + dy * t;
+    return radialDist2(x, y) <= r2;
+  }
+
+  return {
+    contains(x, y, z) {
+      return isInside(x, y, z);
+    },
+
+    intersectSegment(p0x, p0y, p0z, p1x, p1y, p1z) {
+      const dx = p1x - p0x;
+      const dy = p1y - p0y;
+      const dz = p1z - p0z;
+      const candidates: number[] = [];
+
+      const p0Inside = isInside(p0x, p0y, p0z);
+      const p1Inside = isInside(p1x, p1y, p1z);
+
+      const ax = p0x - center[0];
+      const ay = p0y - center[1];
+      const a = dx * dx + dy * dy;
+      const b = 2 * (ax * dx + ay * dy);
+      const c = ax * ax + ay * ay - r2;
+
+      if (a > 1e-12) {
+        const disc = b * b - 4 * a * c;
+        if (disc >= 0) {
+          const sqrtDisc = Math.sqrt(disc);
+          const t0 = (-b - sqrtDisc) / (2 * a);
+          const t1 = (-b + sqrtDisc) / (2 * a);
+          if (isValidSideHit(p0x, p0y, p0z, dx, dy, dz, t0)) candidates.push(t0);
+          if (isValidSideHit(p0x, p0y, p0z, dx, dy, dz, t1)) candidates.push(t1);
+        }
+      }
+
+      if (Math.abs(dz) > 1e-12) {
+        const topT = (center[2] + half - p0z) / dz;
+        const bottomT = (center[2] - half - p0z) / dz;
+        if (isValidCapHit(p0x, p0y, dx, dy, topT)) candidates.push(topT);
+        if (isValidCapHit(p0x, p0y, dx, dy, bottomT)) candidates.push(bottomT);
+      }
+
+      if (candidates.length === 0) {
+        return p0Inside && p1Inside ? null : 0;
+      }
+
+      candidates.sort((lhs, rhs) => lhs - rhs);
+
+      const deduped: number[] = [];
+      for (const t of candidates) {
+        if (deduped.length === 0 || Math.abs(t - deduped[deduped.length - 1]) > 1e-9) {
+          deduped.push(t);
+        }
+      }
+
+      if (p0Inside && p1Inside) return null;
+      if (!p0Inside && !p1Inside) return deduped[0] ?? 0;
+      if (p0Inside) return deduped[deduped.length - 1] ?? null;
+      return deduped[0] ?? 0;
+    },
+  };
+}

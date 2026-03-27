@@ -1,8 +1,8 @@
 import {
   createUnitCell, createGrid, populate, buildBeamGraph, buildRenderData,
   totalCells,
-  createBoxDomain, createSphereDomain, createMeshDomain, createTriangleMesh,
-  tessellateBox, tessellateSphere,
+  createBoxDomain, createSphereDomain, createCylinderDomain, createMeshDomain, createTriangleMesh,
+  tessellateBox, tessellateSphere, tessellateCylinderDomain,
   classifyCells, applyClassification, reclassifyLeakedBeams, trimBeams,
   generateSkin,
   computeLatticeProperties,
@@ -23,14 +23,15 @@ initWasm();
 
 let unitCellId    = $state<string>('bccxy');
 let rStar         = $state(0.08);
-let cellWidth     = $state(1.0); // l_c in mm (paper: Woodward & Fromen)
+let cellWidth     = $state(.35); // l_c in mm (paper: Woodward & Fromen)
 let padding       = $state(1);
 let manualNx      = $state(4);
 let manualNy      = $state(4);
 let manualNz      = $state(4);
 let domainEnabled  = $state(true);
-let domainShape    = $state<'box' | 'sphere'>('sphere');
-let domainRadius   = $state(1.5);
+let domainShape    = $state<'box' | 'sphere' | 'cylinder'>('cylinder');
+let domainRadius   = $state(2.5);
+let domainLength   = $state(3.0);
 let domainSource   = $state<'generated' | 'file'>('generated');
 let meshFileBuffer = $state<ArrayBuffer | null>(null);
 let meshFileName   = $state('');
@@ -46,9 +47,9 @@ let showSkin         = $state(true);
 let showDomainMesh   = $state(true);
 let showGridBounds   = $state(false);
 let showAxes         = $state(true);
-let domainDisplayMode = $state<'solid' | 'wireframe' | 'transparent'>('transparent');
+let domainDisplayMode = $state<'solid' | 'wireframe' | 'transparent'>('wireframe');
 let voxelizerTierOverride = $state<'auto' | 'gpu' | 'cpu-wasm' | 'js'>('auto');
-let renderCylinderSegments = $state(8);
+let renderCylinderSegments = $state(32);
 let renderFlatShading      = $state(true);
 let renderWireframe        = $state(false);
 let renderVersion          = $state(0);
@@ -118,6 +119,15 @@ function getDomainAABB(): { min: [number, number, number]; max: [number, number,
       }
       return { min: mesh.aabbMin, max: mesh.aabbMax };
     } catch { return null; }
+  }
+  if (domainShape === 'sphere') {
+    const r = domainRadius;
+    return { min: [-r, -r, -r], max: [r, r, r] };
+  }
+  if (domainShape === 'cylinder') {
+    const r = domainRadius;
+    const half = domainLength * 0.5;
+    return { min: [-r, -r, -half], max: [r, r, half] };
   }
   const r = domainRadius;
   return { min: [-r, -r, -r], max: [r, r, r] };
@@ -235,6 +245,9 @@ async function runPipeline(gen: number): Promise<void> {
         if (domainShape === 'sphere') {
           domainObj = createSphereDomain([cx, cy, cz], domainRadius);
           domainMesh = tessellateSphere([cx, cy, cz], domainRadius, 24, 48);
+        } else if (domainShape === 'cylinder') {
+          domainObj = createCylinderDomain([cx, cy, cz], domainRadius, domainLength);
+          domainMesh = tessellateCylinderDomain([cx, cy, cz], domainRadius, domainLength, 48, 1);
         } else {
           const r = domainRadius;
           domainObj = createBoxDomain([cx - r, cy - r, cz - r], [cx + r, cy + r, cz + r]);
@@ -399,6 +412,7 @@ export async function commitAndGenerate(): Promise<void> {
       domainSource,
       domainShape,
       domainRadius,
+      domainLength,
       domainSize,
       meshFileBuffer,
       meshFileName,
@@ -471,10 +485,12 @@ export function setCellWidth(v: number) { cellWidth = Math.max(0.001, v); markDi
 /** Returns {min, max, step} for the l_c slider, scaled to domain extent. */
 export function getCellWidthRange(): { min: number; max: number; step: number } {
   if (domainEnabled) {
-    // Use domainSize for file meshes, domainRadius*2 for generated shapes
+    // Use domainSize for file meshes, and the generated shape's max extent otherwise.
     const extent = (domainSource === 'file' && meshNativeExtent > 0)
       ? domainSize
-      : domainRadius * 2;
+      : domainShape === 'cylinder'
+        ? Math.max(domainRadius * 2, domainLength)
+        : domainRadius * 2;
     if (extent > 0) {
       const min = +(extent / 60).toPrecision(1);
       const max = +(extent / 2).toPrecision(2);
@@ -499,10 +515,12 @@ export function setRStar(v: number) { rStar = Math.max(0.01, Math.min(0.45, v));
 
 export function getDomainEnabled(): boolean { return domainEnabled; }
 export function setDomainEnabled(v: boolean) { domainEnabled = v; markDirty(); }
-export function getDomainShape(): 'box' | 'sphere' { return domainShape; }
-export function setDomainShape(v: 'box' | 'sphere') { domainShape = v; markDirty(); }
+export function getDomainShape(): 'box' | 'sphere' | 'cylinder' { return domainShape; }
+export function setDomainShape(v: 'box' | 'sphere' | 'cylinder') { domainShape = v; markDirty(); }
 export function getDomainRadius(): number { return domainRadius; }
 export function setDomainRadius(v: number) { domainRadius = Math.max(0.1, v); markDirty(); }
+export function getDomainLength(): number { return domainLength; }
+export function setDomainLength(v: number) { domainLength = Math.max(0.1, v); markDirty(); }
 export function getDomainSize(): number { return domainSize; }
 export function setDomainSize(v: number) {
   const prev = domainSize;

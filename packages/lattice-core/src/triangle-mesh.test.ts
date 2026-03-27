@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { createTriangleMesh, tessellateBox, tessellateSphere, triangleBounds } from './triangle-mesh.js';
+import { createTriangleMesh, tessellateBox, tessellateCylinderDomain, tessellateSphere, triangleBounds } from './triangle-mesh.js';
 
 describe('createTriangleMesh', () => {
   it('computes correct AABB', () => {
@@ -89,6 +89,40 @@ describe('tessellateSphere', () => {
   });
 
   it('all indices in range', () => {
+    for (let i = 0; i < mesh.indices.length; i++) {
+      expect(mesh.indices[i]).toBeLessThan(mesh.vertexCount);
+    }
+  });
+});
+
+describe('tessellateCylinderDomain', () => {
+  const mesh = tessellateCylinderDomain([1, 2, 3], 2, 6, 16, 2);
+
+  it('has expected vertex count', () => {
+    expect(mesh.vertexCount).toBe((2 + 1) * 16 + 2);
+  });
+
+  it('has expected triangle count', () => {
+    expect(mesh.triangleCount).toBe(2 * 16 * 2 + 16 + 16);
+  });
+
+  it('AABB matches radius and length', () => {
+    expect(mesh.aabbMin[0]).toBeCloseTo(-1, 5);
+    expect(mesh.aabbMax[0]).toBeCloseTo(3, 5);
+    expect(mesh.aabbMin[1]).toBeCloseTo(0, 5);
+    expect(mesh.aabbMax[1]).toBeCloseTo(4, 5);
+    expect(mesh.aabbMin[2]).toBeCloseTo(0, 5);
+    expect(mesh.aabbMax[2]).toBeCloseTo(6, 5);
+  });
+
+  it('top and bottom cap centers are at expected z extents', () => {
+    const topCenter = mesh.vertexCount - 2;
+    const bottomCenter = mesh.vertexCount - 1;
+    expect(mesh.positions[topCenter * 3 + 2]).toBeCloseTo(6, 5);
+    expect(mesh.positions[bottomCenter * 3 + 2]).toBeCloseTo(0, 5);
+  });
+
+  it('all indices are in range', () => {
     for (let i = 0; i < mesh.indices.length; i++) {
       expect(mesh.indices[i]).toBeLessThan(mesh.vertexCount);
     }

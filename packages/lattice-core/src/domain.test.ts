@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { createBoxDomain, createSphereDomain } from './domain.js';
+import { createBoxDomain, createCylinderDomain, createSphereDomain } from './domain.js';
 
 describe('createBoxDomain', () => {
   const box = createBoxDomain([0, 0, 0], [1, 1, 1]);
@@ -65,5 +65,48 @@ describe('createSphereDomain', () => {
   it('intersectSegment: fully outside returns 0', () => {
     const t = sphere.intersectSegment(3, 0, 0, 4, 0, 0);
     expect(t).toBe(0);
+  });
+});
+
+describe('createCylinderDomain', () => {
+  const cylinder = createCylinderDomain([0, 0, 0], 1, 4);
+
+  it('contains center', () => {
+    expect(cylinder.contains(0, 0, 0)).toBe(true);
+  });
+
+  it('contains points on sidewall and caps', () => {
+    expect(cylinder.contains(1, 0, 0)).toBe(true);
+    expect(cylinder.contains(0, 0, 2)).toBe(true);
+  });
+
+  it('rejects points outside radius or length', () => {
+    expect(cylinder.contains(1.1, 0, 0)).toBe(false);
+    expect(cylinder.contains(0, 0, 2.1)).toBe(false);
+  });
+
+  it('intersectSegment: fully inside returns null', () => {
+    expect(cylinder.intersectSegment(0, 0, -1, 0, 0, 1)).toBeNull();
+  });
+
+  it('intersectSegment: sidewall crossing returns valid t', () => {
+    const t = cylinder.intersectSegment(0, 0, 0, 2, 0, 0);
+    expect(t).not.toBeNull();
+    expect(t!).toBeCloseTo(0.5, 5);
+  });
+
+  it('intersectSegment: cap crossing returns valid t', () => {
+    const t = cylinder.intersectSegment(0, 0, 0, 0, 0, 4);
+    expect(t).not.toBeNull();
+    expect(t!).toBeCloseTo(0.5, 5);
+  });
+
+  it('intersectSegment: outside-to-outside through cylinder returns first hit', () => {
+    const t = cylinder.intersectSegment(-2, 0, 0, 2, 0, 0);
+    expect(t).toBeCloseTo(0.25, 5);
+  });
+
+  it('intersectSegment: fully outside returns 0', () => {
+    expect(cylinder.intersectSegment(2, 2, 0, 3, 3, 0)).toBe(0);
   });
 });

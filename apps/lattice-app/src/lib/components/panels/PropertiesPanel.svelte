@@ -9,6 +9,7 @@
     getDomainEnabled, setDomainEnabled,
     getDomainShape, setDomainShape,
     getDomainRadius, setDomainRadius,
+    getDomainLength, setDomainLength,
     getDomainSize, setDomainSize,
     getDomainSource, setDomainSource,
     getMeshFileName, getMeshInfo, setMeshFile,
@@ -103,7 +104,7 @@
       onValueChange={setUnitCellId}
     />
     <ScrubField label="r*" value={getRStar()} min={0.01} max={0.45} step={0.005} decimals={3} onValueChange={setRStar} />
-    <ScrubField label="Segments" value={getRenderCylinderSegments()} min={3} max={32} step={1} decimals={0} onValueChange={setRenderCylinderSegments} />
+    <ScrubField label="Segments" value={getRenderCylinderSegments()} min={3} max={64} step={1} decimals={0} onValueChange={setRenderCylinderSegments} />
   </Section>
 
   <Section sectionId="prop-grid" title="Grid">
@@ -132,11 +133,14 @@
       {#if getDomainSource() === 'generated'}
         <ToggleGroup
           label="Shape"
-          options={[{ value: 'sphere', label: 'Sphere' }, { value: 'box', label: 'Box' }]}
+          options={[{ value: 'sphere', label: 'Sphere' }, { value: 'cylinder', label: 'Cylinder' }, { value: 'box', label: 'Box' }]}
           value={getDomainShape()}
-          onValueChange={(v) => setDomainShape(v as 'box' | 'sphere')}
+          onValueChange={(v) => setDomainShape(v as 'box' | 'sphere' | 'cylinder')}
         />
         <ScrubField label="Radius (mm)" value={getDomainRadius()} min={0.1} max={20} step={0.1} decimals={2} onValueChange={setDomainRadius} />
+        {#if getDomainShape() === 'cylinder'}
+          <ScrubField label="Length (mm)" value={getDomainLength()} min={0.1} max={50} step={0.1} decimals={2} onValueChange={setDomainLength} />
+        {/if}
       {:else}
         <input bind:this={fileInput} type="file" accept=".stl,.obj" onchange={handleFileUpload} class="hidden-input" />
         <ActionButton onclick={() => fileInput?.click()} fullWidth>

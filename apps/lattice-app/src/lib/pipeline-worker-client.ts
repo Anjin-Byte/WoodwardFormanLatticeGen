@@ -78,8 +78,9 @@ export interface PipelineWorkerOptions {
   manualNz: number;
   domainEnabled: boolean;
   domainSource: 'generated' | 'file';
-  domainShape: 'box' | 'sphere';
+  domainShape: 'box' | 'sphere' | 'cylinder';
   domainRadius: number;
+  domainLength: number;
   domainSize: number;
   meshFileBuffer: ArrayBuffer | null;
   meshFileName: string;
@@ -193,6 +194,7 @@ export function runPipelineInWorker(
       domainSource: options.domainSource,
       domainShape: options.domainShape,
       domainRadius: options.domainRadius,
+      domainLength: options.domainLength,
       domainSize: options.domainSize,
       meshFileBuffer: meshBuffer,
       meshFileName: options.meshFileName,

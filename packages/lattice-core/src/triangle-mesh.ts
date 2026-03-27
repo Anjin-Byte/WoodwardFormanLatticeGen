@@ -157,3 +157,66 @@ export function tessellateSphere(
     new Uint32Array(tris),
   );
 }
+
+export function tessellateCylinderDomain(
+  center: [number, number, number],
+  radius: number,
+  length: number,
+  radialSegments: number = 32,
+  axialSegments: number = 1,
+): TriangleMesh {
+  const verts: number[] = [];
+  const tris: number[] = [];
+  const half = length * 0.5;
+  const safeRadialSegments = Math.max(3, radialSegments);
+  const safeAxialSegments = Math.max(1, axialSegments);
+
+  function ringVertexIndex(ring: number, seg: number): number {
+    return ring * safeRadialSegments + seg;
+  }
+
+  for (let ring = 0; ring <= safeAxialSegments; ring++) {
+    const z = center[2] - half + (ring / safeAxialSegments) * length;
+    for (let seg = 0; seg < safeRadialSegments; seg++) {
+      const phi = (seg / safeRadialSegments) * 2 * Math.PI;
+      verts.push(
+        center[0] + radius * Math.cos(phi),
+        center[1] + radius * Math.sin(phi),
+        z,
+      );
+    }
+  }
+
+  const topCenterIndex = verts.length / 3;
+  verts.push(center[0], center[1], center[2] + half);
+  const bottomCenterIndex = verts.length / 3;
+  verts.push(center[0], center[1], center[2] - half);
+
+  for (let ring = 0; ring < safeAxialSegments; ring++) {
+    for (let seg = 0; seg < safeRadialSegments; seg++) {
+      const next = (seg + 1) % safeRadialSegments;
+      const a = ringVertexIndex(ring, seg);
+      const b = ringVertexIndex(ring, next);
+      const c = ringVertexIndex(ring + 1, next);
+      const d = ringVertexIndex(ring + 1, seg);
+      tris.push(a, d, b);
+      tris.push(b, d, c);
+    }
+  }
+
+  const topRing = safeAxialSegments;
+  for (let seg = 0; seg < safeRadialSegments; seg++) {
+    const next = (seg + 1) % safeRadialSegments;
+    tris.push(topCenterIndex, ringVertexIndex(topRing, seg), ringVertexIndex(topRing, next));
+  }
+
+  for (let seg = 0; seg < safeRadialSegments; seg++) {
+    const next = (seg + 1) % safeRadialSegments;
+    tris.push(bottomCenterIndex, ringVertexIndex(0, next), ringVertexIndex(0, seg));
+  }
+
+  return createTriangleMesh(
+    new Float32Array(verts),
+    new Uint32Array(tris),
+  );
+}

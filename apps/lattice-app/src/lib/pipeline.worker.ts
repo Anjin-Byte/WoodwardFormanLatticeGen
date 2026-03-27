@@ -4,8 +4,8 @@
 import {
   createUnitCell, createGrid, populate, buildBeamGraph, buildRenderData,
   totalCells,
-  createBoxDomain, createSphereDomain, createMeshDomain, createTriangleMesh,
-  tessellateBox, tessellateSphere,
+  createBoxDomain, createSphereDomain, createCylinderDomain, createMeshDomain, createTriangleMesh,
+  tessellateBox, tessellateSphere, tessellateCylinderDomain,
   classifyCells, applyClassification, reclassifyLeakedBeams, trimBeams,
   generateSkin,
   clipBoundaryBeams, buildDomainIndex,
@@ -31,8 +31,9 @@ interface PipelineRequest {
   manualNz: number;
   domainEnabled: boolean;
   domainSource: 'generated' | 'file';
-  domainShape: 'box' | 'sphere';
+  domainShape: 'box' | 'sphere' | 'cylinder';
   domainRadius: number;
+  domainLength: number;
   domainSize: number;
   meshFileBuffer: ArrayBuffer | null;
   meshFileName: string;
@@ -115,9 +116,20 @@ function computeGrid(req: PipelineRequest): LatticeGrid {
           [req.cellWidth, req.cellWidth, req.cellWidth]);
       }
     } else {
-      const r = req.domainRadius;
-      aabbMin = [-r, -r, -r];
-      aabbMax = [r, r, r];
+      if (req.domainShape === 'sphere') {
+        const r = req.domainRadius;
+        aabbMin = [-r, -r, -r];
+        aabbMax = [r, r, r];
+      } else if (req.domainShape === 'cylinder') {
+        const r = req.domainRadius;
+        const half = req.domainLength * 0.5;
+        aabbMin = [-r, -r, -half];
+        aabbMax = [r, r, half];
+      } else {
+        const r = req.domainRadius;
+        aabbMin = [-r, -r, -r];
+        aabbMax = [r, r, r];
+      }
     }
 
     const rangeX = aabbMax[0] - aabbMin[0];
@@ -225,6 +237,9 @@ self.onmessage = async (e: MessageEvent<PipelineRequest>) => {
           if (req.domainShape === 'sphere') {
             domainObj = createSphereDomain([cx, cy, cz], req.domainRadius);
             domainMesh = tessellateSphere([cx, cy, cz], req.domainRadius, 24, 48);
+          } else if (req.domainShape === 'cylinder') {
+            domainObj = createCylinderDomain([cx, cy, cz], req.domainRadius, req.domainLength);
+            domainMesh = tessellateCylinderDomain([cx, cy, cz], req.domainRadius, req.domainLength, 48, 1);
           } else {
             const r = req.domainRadius;
             domainObj = createBoxDomain([cx - r, cy - r, cz - r], [cx + r, cy + r, cz + r]);
