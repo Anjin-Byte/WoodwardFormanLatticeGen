@@ -56,7 +56,11 @@ let clippingMode           = $state<'approximate' | 'exact'>('approximate');
 
 // ─── Deferred pipeline execution ────────────────────────────────────────────
 
-let paramsDirty = $state(true);  // true on first load to trigger initial generate
+let paramsDirty = $state(true);
+let pipelineInProgress = $state(false);
+let pipelineProgress   = $state(0);
+let pipelinePhase      = $state('');
+let pipelineAbort: AbortController | null = null;
 
 // ─── Pipeline types ─────────────────────────────────────────────────────────
 
@@ -362,16 +366,86 @@ async function runPipeline(gen: number): Promise<void> {
 /** Mark params as dirty — called by all parameter setters. */
 function markDirty() { paramsDirty = true; }
 
-/** Commit current params and run the pipeline. */
+/** Commit current params and run the pipeline in a Web Worker. */
 export async function commitAndGenerate(): Promise<void> {
   paramsDirty = false;
   const gen = ++pipelineGen;
-  await runPipeline(gen);
+
+  // Cancel any in-flight worker
+  if (pipelineAbort) {
+    pipelineAbort.abort();
+    pipelineAbort = null;
+  }
+
+  pipelineInProgress = true;
+  pipelineProgress = 0;
+  pipelinePhase = '';
+
+  const abort = new AbortController();
+  pipelineAbort = abort;
+
+  try {
+    const { runPipelineInWorker } = await import('$lib/pipeline-worker-client');
+
+    const result = await runPipelineInWorker({
+      unitCellId,
+      rStar,
+      cellWidth,
+      padding,
+      manualNx,
+      manualNy,
+      manualNz,
+      domainEnabled,
+      domainSource,
+      domainShape,
+      domainRadius,
+      domainSize,
+      meshFileBuffer,
+      meshFileName,
+      meshNativeExtent,
+      clippingMode,
+      skinEnabled,
+      renderCylinderSegments,
+      wasmUrl: `${import.meta.env.BASE_URL}manifold.wasm`,
+      onProgress: (phase, pct) => {
+        pipelinePhase = phase;
+        pipelineProgress = pct;
+      },
+    }, abort.signal);
+
+    // Staleness check
+    if (gen !== pipelineGen) return;
+
+    pipelineOutput = {
+      renderData: result.renderData,
+      stats: result.stats,
+      domainMesh: result.domainMesh,
+      clippedBeams: result.clippedBeams,
+      intersectedMesh: result.intersectedMesh,
+      graph: result.graph,
+      trim: result.trim,
+      skin: result.skin,
+    };
+  } catch (e) {
+    if (e instanceof DOMException && e.name === 'AbortError') return;
+    console.error('[pipeline] Worker failed:', e);
+    pipelineOutput = null;
+  } finally {
+    if (gen === pipelineGen) {
+      pipelineInProgress = false;
+      pipelineProgress = 1;
+      pipelinePhase = '';
+      pipelineAbort = null;
+    }
+  }
 }
 
 export function isParamsDirty(): boolean { return paramsDirty; }
+export function getPipelineInProgress(): boolean { return pipelineInProgress; }
+export function getPipelineProgress(): number { return pipelineProgress; }
+export function getPipelinePhase(): string { return pipelinePhase; }
 
-// Auto-generate on first load (once WASM is ready or after a tick)
+// Auto-generate on first load
 setTimeout(() => commitAndGenerate(), 0);
 
 // ─── Public API: outputs ────────────────────────────────────────────────────
