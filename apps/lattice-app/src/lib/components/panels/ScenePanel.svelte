@@ -1,7 +1,11 @@
 <script lang="ts">
   import { Section, ScrubField, CheckboxRow, ToggleGroup } from '@gestalt/phi';
   import { TreeList } from '@gestalt/phi';
-  import type { TreeListDomain, TreeListItem, TreeListCellData } from '@gestalt/phi';
+  import type { TreeListDomain, TreeListItem, TreeListColumnDef, CellIcon } from '@gestalt/phi';
+  import { Eye, EyeOff } from 'lucide-svelte';
+
+  const eyeOn = Eye as unknown as CellIcon;
+  const eyeOff = EyeOff as unknown as CellIcon;
   import {
     getShowBeams, setShowBeams,
     getShowSkin, setShowSkin,
@@ -14,9 +18,9 @@
     getRenderFlatShading, setRenderFlatShading,
   } from '$lib/stores/lattice.svelte';
 
-  // ─── Visibility state as a reactive object for TreeList ──────────────────
+  // ─── Visibility state as reactive data for TreeList ──────────────────────
 
-  interface SceneData {
+  interface LayerState {
     beams: boolean;
     skin: boolean;
     domain: boolean;
@@ -26,7 +30,7 @@
     skinEnabled: boolean;
   }
 
-  const sceneData: SceneData = $derived({
+  let layerData: LayerState = $derived({
     beams: getShowBeams(),
     skin: getShowSkin(),
     domain: getShowDomainMesh(),
@@ -36,31 +40,51 @@
     skinEnabled: getSkinEnabled(),
   });
 
-  const visToggle = (v: boolean): TreeListCellData => ({
-    type: 'toggle', value: v, icon: v ? 'eye' : 'eye-off', propagatable: false,
-  });
+  const sceneColumns: TreeListColumnDef[] = [
+    { id: 'visible', width: 22, label: 'Visible' },
+  ];
 
-  const sceneDomain: TreeListDomain<SceneData> = {
-    domainId: 'scene-layers',
-    columns: [{ id: 'vis', width: 28, label: 'Visibility' }],
-    rows(data: SceneData): TreeListItem[] {
+  const sceneDomain: TreeListDomain<LayerState> = {
+    domainId: 'lattice-scene',
+    columns: sceneColumns,
+    rows(data: LayerState): TreeListItem[] {
       const items: TreeListItem[] = [
         { kind: 'group', id: 'grp-lattice', label: 'Lattice' },
-        { kind: 'row', id: 'beams', groupId: 'grp-lattice', label: 'Beams', icon: 'cylinder', cells: [visToggle(data.beams)] },
+        {
+          kind: 'row', id: 'beams', groupId: 'grp-lattice', label: 'Beams',
+          faded: !data.beams,
+          cells: [{ type: 'toggle', value: data.beams, icon: data.beams ? eyeOn : eyeOff }],
+        },
       ];
       if (data.skinEnabled) {
-        items.push({ kind: 'row', id: 'skin', groupId: 'grp-lattice', label: 'Skin', icon: 'shell', cells: [visToggle(data.skin)], faded: !data.skin });
+        items.push({
+          kind: 'row', id: 'skin', groupId: 'grp-lattice', label: 'Skin',
+          faded: !data.skin,
+          cells: [{ type: 'toggle', value: data.skin, icon: data.skin ? eyeOn : eyeOff }],
+        });
       }
       if (data.domainEnabled) {
         items.push(
           { kind: 'group', id: 'grp-domain', label: 'Domain' },
-          { kind: 'row', id: 'domain-mesh', groupId: 'grp-domain', label: 'Mesh', icon: 'box', cells: [visToggle(data.domain)], faded: !data.domain },
+          {
+            kind: 'row', id: 'domain-mesh', groupId: 'grp-domain', label: 'Mesh',
+            faded: !data.domain,
+            cells: [{ type: 'toggle', value: data.domain, icon: data.domain ? eyeOn : eyeOff }],
+          },
         );
       }
       items.push(
         { kind: 'group', id: 'grp-helpers', label: 'Helpers' },
-        { kind: 'row', id: 'grid-bounds', groupId: 'grp-helpers', label: 'Grid Bounds', icon: 'grid-3x3', cells: [visToggle(data.gridBounds)], faded: !data.gridBounds },
-        { kind: 'row', id: 'axes', groupId: 'grp-helpers', label: 'Axes', icon: 'move-3d', cells: [visToggle(data.axes)], faded: !data.axes },
+        {
+          kind: 'row', id: 'grid-bounds', groupId: 'grp-helpers', label: 'Grid Bounds',
+          faded: !data.gridBounds,
+          cells: [{ type: 'toggle', value: data.gridBounds, icon: data.gridBounds ? eyeOn : eyeOff }],
+        },
+        {
+          kind: 'row', id: 'axes', groupId: 'grp-helpers', label: 'Axes',
+          faded: !data.axes,
+          cells: [{ type: 'toggle', value: data.axes, icon: data.axes ? eyeOn : eyeOff }],
+        },
       );
       return items;
     },
@@ -78,12 +102,14 @@
 </script>
 
 <div class="panel">
-  <div class="tree-container">
-    <TreeList domain={sceneDomain} data={sceneData} />
-  </div>
+  <Section sectionId="scene-layers" title="Layers" card>
+    <div class="treelist-frame">
+      <TreeList domain={sceneDomain} data={layerData} />
+    </div>
+  </Section>
 
   {#if getDomainEnabled() && getShowDomainMesh()}
-    <Section sectionId="scene-domain-display" title="Domain Display">
+    <Section sectionId="scene-domain-display" title="Domain Display" card>
       <ToggleGroup
         label="Mode"
         options={[
@@ -97,7 +123,7 @@
     </Section>
   {/if}
 
-  <Section sectionId="scene-quality" title="Quality">
+  <Section sectionId="scene-quality" title="Quality" card>
     <ScrubField label="Segments" value={getRenderCylinderSegments()} min={3} max={32} step={1} decimals={0} onValueChange={setRenderCylinderSegments} />
     <CheckboxRow label="Flat Shading" checked={getRenderFlatShading()} onchange={setRenderFlatShading} />
   </Section>
@@ -110,8 +136,11 @@
     padding: 6px 8px;
   }
 
-  .tree-container {
-    height: 200px;
-    min-height: 120px;
+  .treelist-frame {
+    height: 220px;
+    border: 1px solid var(--stroke-lo, oklch(1 0 0 / 0.06));
+    border-radius: 4px;
+    overflow: hidden;
+    margin-bottom: 6px;
   }
 </style>

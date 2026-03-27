@@ -52,7 +52,7 @@
     display: flex;
     align-items: stretch;
     height: 26px;
-    background: var(--fill-lo, oklch(1 0 0 / 0.05));
+    background: oklch(0.13 0.01 250);
     border-bottom: 1px solid var(--stroke-lo, oklch(1 0 0 / 0.06));
     overflow-x: auto;
     overflow-y: hidden;
@@ -68,7 +68,7 @@
     border: none;
     border-right: 1px solid var(--stroke-lo, oklch(1 0 0 / 0.06));
     background: none;
-    color: var(--text-subtle, #999);
+    color: var(--text-faint, #666);
     font-size: 11px;
     font-weight: 500;
     cursor: pointer;
@@ -78,12 +78,12 @@
 
   .dock-tab:hover {
     color: var(--text-mid, #ccc);
-    background: var(--fill-mid, oklch(1 0 0 / 0.08));
+    background: oklch(1 0 0 / 0.06);
   }
 
   .dock-tab.active {
     color: var(--text-hi, #eee);
-    background: var(--fill-mid, oklch(1 0 0 / 0.08));
+    background: var(--surface-3, oklch(0.18 0.015 250));
     border-bottom: 2px solid var(--interactive, oklch(0.80 0.16 250));
   }
 
