@@ -21,6 +21,7 @@
     getExportCylinderSegments, setExportCylinderSegments,
     getLastExportStatus, getLastExportSummary,
     commitAndGenerate, isParamsDirty,
+    getClippingMode, setClippingMode,
   } from '$lib/stores/lattice.svelte';
 
   interface SampleModel { id: string; label: string; file: string }
@@ -160,6 +161,12 @@
 
       <div class="separator"></div>
       <CheckboxRow label="Skin" checked={getSkinEnabled()} onchange={setSkinEnabled} />
+      <ToggleGroup
+        label="Clipping"
+        options={[{ value: 'approximate', label: 'Fast' }, { value: 'exact', label: 'Exact' }]}
+        value={getClippingMode()}
+        onValueChange={(v) => setClippingMode(v as 'approximate' | 'exact')}
+      />
     {/if}
   </Section>
 

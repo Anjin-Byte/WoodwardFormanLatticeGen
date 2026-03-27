@@ -52,6 +52,7 @@ let renderCylinderSegments = $state(8);
 let renderFlatShading      = $state(true);
 let renderWireframe        = $state(false);
 let renderVersion          = $state(0);
+let clippingMode           = $state<'approximate' | 'exact'>('approximate');
 
 // ─── Deferred pipeline execution ────────────────────────────────────────────
 
@@ -239,11 +240,11 @@ async function runPipeline(gen: number): Promise<void> {
       });
     }
 
-    // Exact boolean intersection: tessellate all beams → intersect with domain
-    if (domainMesh) {
+    if (clippingMode === 'exact' && domainMesh) {
+      // Exact: Manifold boolean intersection (slow but mathematically correct)
       const dm: TriangleMesh = domainMesh;
       const tIntersect = performance.now();
-      console.log('[pipeline] Running Manifold boolean intersection...');
+      console.log('[pipeline] Running Manifold boolean intersection (exact mode)...');
       try {
         const intersectResult = await intersectLatticeWithDomain(
           graph, skin, dm,
@@ -263,14 +264,41 @@ async function runPipeline(gen: number): Promise<void> {
         console.log(`[pipeline] Manifold intersection complete: ${(performance.now() - tIntersect).toFixed(0)} ms, ${intersectResult.mesh.triangleCount} triangles`);
       } catch (e) {
         console.error('[pipeline] Manifold intersection failed, falling back to approximate:', e);
-        // Fallback: use old classify → trim → clip path
         if (domainObj) {
           classification = classifyCells(graph, domainObj);
           classMethod = 'js-bvh (fallback)';
           applyClassification(graph, classification);
+          reclassifyLeakedBeams(graph, domainObj, domainMesh!);
           trim = trimBeams(graph, domainObj);
           stages.push({ name: 'Classify+Trim', method: classMethod, timeMs: performance.now() - tIntersect, output: 'fallback' });
         }
+      }
+    } else if (domainObj && domainMesh) {
+      // Approximate: classify → trim → clip (fast but may leak at thin features)
+      const dm: TriangleMesh = domainMesh;
+      const dObj: Domain = domainObj;
+      time('Classify', 'bvh', () => {
+        classification = classifyCells(graph, dObj);
+        classMethod = 'js-bvh';
+        return classMethod;
+      });
+      time('Trim', 'intersect', () => {
+        applyClassification(graph, classification!);
+        reclassifyLeakedBeams(graph, dObj, dm);
+        trim = trimBeams(graph, dObj);
+        let tc = 0, rc = 0;
+        for (let b = 0; b < graph.beamCount; b++) {
+          if (graph.beamFlags[b] & 0b00000100) tc++;
+          if (graph.beamFlags[b] & 0b00010000) rc++;
+        }
+        return `${tc} trimmed ${rc} removed`;
+      });
+
+      if (skinEnabled) {
+        time('Skin', 'face-stitch', () => {
+          skin = generateSkin(graph, trim!, cell, classification!);
+          return `${skin!.beamCount}b`;
+        });
       }
     }
   }
@@ -459,6 +487,8 @@ export function setRenderCylinderSegments(v: number) { renderCylinderSegments = 
 export function getRenderFlatShading(): boolean { return renderFlatShading; }
 export function setRenderFlatShading(v: boolean) { renderFlatShading = v; renderVersion++; }
 export function getRenderVersion(): number { return renderVersion; }
+export function getClippingMode(): 'approximate' | 'exact' { return clippingMode; }
+export function setClippingMode(v: 'approximate' | 'exact') { clippingMode = v; markDirty(); }
 
 // ─── Public API: export ─────────────────────────────────────────────────────
 
