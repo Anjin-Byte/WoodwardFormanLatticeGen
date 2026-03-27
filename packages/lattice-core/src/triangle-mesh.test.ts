@@ -109,17 +109,17 @@ describe('tessellateCylinderDomain', () => {
   it('AABB matches radius and length', () => {
     expect(mesh.aabbMin[0]).toBeCloseTo(-1, 5);
     expect(mesh.aabbMax[0]).toBeCloseTo(3, 5);
-    expect(mesh.aabbMin[1]).toBeCloseTo(0, 5);
-    expect(mesh.aabbMax[1]).toBeCloseTo(4, 5);
-    expect(mesh.aabbMin[2]).toBeCloseTo(0, 5);
-    expect(mesh.aabbMax[2]).toBeCloseTo(6, 5);
+    expect(mesh.aabbMin[1]).toBeCloseTo(-1, 5);
+    expect(mesh.aabbMax[1]).toBeCloseTo(5, 5);
+    expect(mesh.aabbMin[2]).toBeCloseTo(1, 5);
+    expect(mesh.aabbMax[2]).toBeCloseTo(5, 5);
   });
 
-  it('top and bottom cap centers are at expected z extents', () => {
+  it('top and bottom cap centers are at expected y extents', () => {
     const topCenter = mesh.vertexCount - 2;
     const bottomCenter = mesh.vertexCount - 1;
-    expect(mesh.positions[topCenter * 3 + 2]).toBeCloseTo(6, 5);
-    expect(mesh.positions[bottomCenter * 3 + 2]).toBeCloseTo(0, 5);
+    expect(mesh.positions[topCenter * 3 + 1]).toBeCloseTo(5, 5);
+    expect(mesh.positions[bottomCenter * 3 + 1]).toBeCloseTo(-1, 5);
   });
 
   it('all indices are in range', () => {

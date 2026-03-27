@@ -127,7 +127,7 @@ function getDomainAABB(): { min: [number, number, number]; max: [number, number,
   if (domainShape === 'cylinder') {
     const r = domainRadius;
     const half = domainLength * 0.5;
-    return { min: [-r, -r, -half], max: [r, r, half] };
+    return { min: [-r, -half, -r], max: [r, half, r] };
   }
   const r = domainRadius;
   return { min: [-r, -r, -r], max: [r, r, r] };

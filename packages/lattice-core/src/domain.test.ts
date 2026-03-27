@@ -77,16 +77,16 @@ describe('createCylinderDomain', () => {
 
   it('contains points on sidewall and caps', () => {
     expect(cylinder.contains(1, 0, 0)).toBe(true);
-    expect(cylinder.contains(0, 0, 2)).toBe(true);
+    expect(cylinder.contains(0, 2, 0)).toBe(true);
   });
 
   it('rejects points outside radius or length', () => {
     expect(cylinder.contains(1.1, 0, 0)).toBe(false);
-    expect(cylinder.contains(0, 0, 2.1)).toBe(false);
+    expect(cylinder.contains(0, 2.1, 0)).toBe(false);
   });
 
   it('intersectSegment: fully inside returns null', () => {
-    expect(cylinder.intersectSegment(0, 0, -1, 0, 0, 1)).toBeNull();
+    expect(cylinder.intersectSegment(0, -1, 0, 0, 1, 0)).toBeNull();
   });
 
   it('intersectSegment: sidewall crossing returns valid t', () => {
@@ -96,7 +96,7 @@ describe('createCylinderDomain', () => {
   });
 
   it('intersectSegment: cap crossing returns valid t', () => {
-    const t = cylinder.intersectSegment(0, 0, 0, 0, 0, 4);
+    const t = cylinder.intersectSegment(0, 0, 0, 0, 4, 0);
     expect(t).not.toBeNull();
     expect(t!).toBeCloseTo(0.5, 5);
   });

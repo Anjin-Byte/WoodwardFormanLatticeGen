@@ -123,8 +123,8 @@ function computeGrid(req: PipelineRequest): LatticeGrid {
       } else if (req.domainShape === 'cylinder') {
         const r = req.domainRadius;
         const half = req.domainLength * 0.5;
-        aabbMin = [-r, -r, -half];
-        aabbMax = [r, r, half];
+        aabbMin = [-r, -half, -r];
+        aabbMax = [r, half, r];
       } else {
         const r = req.domainRadius;
         aabbMin = [-r, -r, -r];

@@ -176,21 +176,21 @@ export function tessellateCylinderDomain(
   }
 
   for (let ring = 0; ring <= safeAxialSegments; ring++) {
-    const z = center[2] - half + (ring / safeAxialSegments) * length;
+    const y = center[1] - half + (ring / safeAxialSegments) * length;
     for (let seg = 0; seg < safeRadialSegments; seg++) {
       const phi = (seg / safeRadialSegments) * 2 * Math.PI;
       verts.push(
         center[0] + radius * Math.cos(phi),
-        center[1] + radius * Math.sin(phi),
-        z,
+        y,
+        center[2] + radius * Math.sin(phi),
       );
     }
   }
 
   const topCenterIndex = verts.length / 3;
-  verts.push(center[0], center[1], center[2] + half);
+  verts.push(center[0], center[1] + half, center[2]);
   const bottomCenterIndex = verts.length / 3;
-  verts.push(center[0], center[1], center[2] - half);
+  verts.push(center[0], center[1] - half, center[2]);
 
   for (let ring = 0; ring < safeAxialSegments; ring++) {
     for (let seg = 0; seg < safeRadialSegments; seg++) {

@@ -126,14 +126,14 @@ export function createCylinderDomain(
   const r2 = radius * radius;
   const half = length * 0.5;
 
-  function radialDist2(x: number, y: number): number {
+  function radialDist2(x: number, z: number): number {
     const dx = x - center[0];
-    const dy = y - center[1];
-    return dx * dx + dy * dy;
+    const dz = z - center[2];
+    return dx * dx + dz * dz;
   }
 
   function isInside(x: number, y: number, z: number): boolean {
-    return radialDist2(x, y) <= r2 && Math.abs(z - center[2]) <= half;
+    return radialDist2(x, z) <= r2 && Math.abs(y - center[1]) <= half;
   }
 
   function isValidSideHit(
@@ -142,19 +142,19 @@ export function createCylinderDomain(
     t: number,
   ): boolean {
     if (t < 0 || t > 1) return false;
-    const z = p0z + dz * t;
-    return Math.abs(z - center[2]) <= half;
+    const y = p0y + dy * t;
+    return Math.abs(y - center[1]) <= half;
   }
 
   function isValidCapHit(
-    p0x: number, p0y: number,
-    dx: number, dy: number,
+    p0x: number, p0z: number,
+    dx: number, dz: number,
     t: number,
   ): boolean {
     if (t < 0 || t > 1) return false;
     const x = p0x + dx * t;
-    const y = p0y + dy * t;
-    return radialDist2(x, y) <= r2;
+    const z = p0z + dz * t;
+    return radialDist2(x, z) <= r2;
   }
 
   return {
@@ -172,10 +172,10 @@ export function createCylinderDomain(
       const p1Inside = isInside(p1x, p1y, p1z);
 
       const ax = p0x - center[0];
-      const ay = p0y - center[1];
-      const a = dx * dx + dy * dy;
-      const b = 2 * (ax * dx + ay * dy);
-      const c = ax * ax + ay * ay - r2;
+      const az = p0z - center[2];
+      const a = dx * dx + dz * dz;
+      const b = 2 * (ax * dx + az * dz);
+      const c = ax * ax + az * az - r2;
 
       if (a > 1e-12) {
         const disc = b * b - 4 * a * c;
@@ -188,11 +188,11 @@ export function createCylinderDomain(
         }
       }
 
-      if (Math.abs(dz) > 1e-12) {
-        const topT = (center[2] + half - p0z) / dz;
-        const bottomT = (center[2] - half - p0z) / dz;
-        if (isValidCapHit(p0x, p0y, dx, dy, topT)) candidates.push(topT);
-        if (isValidCapHit(p0x, p0y, dx, dy, bottomT)) candidates.push(bottomT);
+      if (Math.abs(dy) > 1e-12) {
+        const topT = (center[1] + half - p0y) / dy;
+        const bottomT = (center[1] - half - p0y) / dy;
+        if (isValidCapHit(p0x, p0z, dx, dz, topT)) candidates.push(topT);
+        if (isValidCapHit(p0x, p0z, dx, dz, bottomT)) candidates.push(bottomT);
       }
 
       if (candidates.length === 0) {
