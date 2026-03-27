@@ -304,6 +304,7 @@ export function clipBoundaryBeams(
   domainMesh: TriangleMesh,
   domainIndex: DomainIndex,
   trim: TrimResult | null,
+  segments: number = CYL_SEGMENTS,
 ): ClippedBeamResult[] {
   const results: ClippedBeamResult[] = [];
   const grid = graph.grid;
@@ -347,7 +348,7 @@ export function clipBoundaryBeams(
     if (!hasTris) continue;
 
     // Generate cylinder mesh
-    let mesh = generateCylinder(p0, p1, radius);
+    let mesh = generateCylinder(p0, p1, radius, segments);
     if (mesh.triangleCount === 0) continue;
 
     // Clip using domain containment (proper CSG)

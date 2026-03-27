@@ -5,7 +5,7 @@
     getLatticeRenderData, getDomainTriangleMesh, getActiveGrid, getClippedBeams,
     getShowBeams, getShowSkin, getShowDomainMesh, getShowGridBounds, getShowAxes,
     getDomainDisplayMode,
-    getRenderCylinderSegments, getRenderFlatShading,
+    getRenderCylinderSegments, getRenderFlatShading, getRenderVersion,
   } from '$lib/stores/lattice.svelte';
   import type { BeamRenderData, TriangleMesh, ClippedBeamResult } from '@lattice/core';
   import * as THREE from 'three';
@@ -22,10 +22,6 @@
 
   let prevDomainMesh: TriangleMesh | null = null;
 
-  // Derived values ensure Svelte tracks these as reactive dependencies
-  const renderSegments = $derived(getRenderCylinderSegments());
-  const renderFlat = $derived(getRenderFlatShading());
-
   onMount(() => {
     viewer = new Viewer();
     viewer.mount(containerEl);
@@ -41,31 +37,28 @@
     if (latticeMesh) latticeMesh.visible = getShowBeams();
   });
 
-  // Rebuild mesh when data or quality changes
+  // Rebuild mesh when data or render quality changes.
+  // getRenderVersion() is a counter bumped by segment/flatShading setters —
+  // reading it forces Svelte to re-run this effect when quality params change.
   $effect(() => {
     const data = getLatticeRenderData();
-    const segments = renderSegments;
-    const flatShading = renderFlat;
-    if (!viewer || !data || data.count === 0) {
-      if (latticeMesh) {
-        viewer?.remove(latticeMesh);
-        latticeMesh.geometry.dispose();
-        (latticeMesh.material as THREE.Material).dispose();
-        latticeMesh = null;
-      }
-      return;
-    }
+    const _v = getRenderVersion(); // reactive trigger for quality changes
+    if (!viewer) return;
 
-    // Always dispose and rebuild — segments/flatShading/data may have changed
-    console.log(`[viewport] Rebuilding lattice mesh: segments=${segments}, flatShading=${flatShading}, beams=${data.count}`);
     if (latticeMesh) {
       viewer.remove(latticeMesh);
       latticeMesh.geometry.dispose();
       (latticeMesh.material as THREE.Material).dispose();
+      latticeMesh = null;
     }
-    latticeMesh = createLatticeMesh(data, { segments, flatShading });
-    latticeMesh.visible = getShowBeams();
-    viewer.add(latticeMesh);
+
+    if (data && data.count > 0) {
+      const segments = getRenderCylinderSegments();
+      const flatShading = getRenderFlatShading();
+      latticeMesh = createLatticeMesh(data, { segments, flatShading });
+      latticeMesh.visible = getShowBeams();
+      viewer.add(latticeMesh);
+    }
   });
 
   // ─── Clipped boundary beams ───────────────────────────────────────────────
@@ -76,7 +69,7 @@
 
   $effect(() => {
     const clipped = getClippedBeams();
-    const flatShading = renderFlat;
+    const _v = getRenderVersion();
     if (!viewer) return;
 
     if (clippedMeshObj) {
@@ -86,7 +79,7 @@
       clippedMeshObj = null;
     }
     if (clipped.length > 0) {
-      clippedMeshObj = mergeClippedMeshes(clipped, flatShading);
+      clippedMeshObj = mergeClippedMeshes(clipped, getRenderFlatShading());
       clippedMeshObj.visible = getShowBeams();
       viewer.add(clippedMeshObj);
     }

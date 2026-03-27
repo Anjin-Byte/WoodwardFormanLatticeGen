@@ -13,6 +13,7 @@
     getDomainSource, setDomainSource,
     getMeshFileName, getMeshInfo, setMeshFile,
     getSkinEnabled, setSkinEnabled,
+    getRenderCylinderSegments, setRenderCylinderSegments,
     getExportInProgress, getExportMcDensity, setExportMcDensity,
     getExportFilletK, setExportFilletK, getAutoMcDensity, triggerExport,
     getExportProgress, getExportPhase, getExportTierUsed, getExportTierAvailable,
@@ -101,6 +102,7 @@
       onValueChange={setUnitCellId}
     />
     <ScrubField label="r*" value={getRStar()} min={0.01} max={0.45} step={0.005} decimals={3} onValueChange={setRStar} />
+    <ScrubField label="Segments" value={getRenderCylinderSegments()} min={3} max={32} step={1} decimals={0} onValueChange={setRenderCylinderSegments} />
   </Section>
 
   <Section sectionId="prop-grid" title="Grid">

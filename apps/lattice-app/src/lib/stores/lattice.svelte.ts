@@ -21,7 +21,7 @@ initWasm();
 
 // ─── Parameters ─────────────────────────────────────────────────────────────
 
-let unitCellId    = $state<string>('cubic');
+let unitCellId    = $state<string>('bccxy');
 let rStar         = $state(0.08);
 let cellWidth     = $state(1.0); // l_c in mm (paper: Woodward & Fromen)
 let padding       = $state(1);
@@ -49,8 +49,9 @@ let showAxes         = $state(true);
 let domainDisplayMode = $state<'solid' | 'wireframe' | 'transparent'>('transparent');
 let voxelizerTierOverride = $state<'auto' | 'gpu' | 'cpu-wasm' | 'js'>('auto');
 let renderCylinderSegments = $state(8);
-let renderFlatShading      = $state(false);
+let renderFlatShading      = $state(true);
 let renderWireframe        = $state(false);
+let renderVersion          = $state(0);
 
 // ─── Deferred pipeline execution ────────────────────────────────────────────
 
@@ -314,7 +315,7 @@ async function runPipeline(gen: number): Promise<void> {
   if (domainObj && domainMesh && trim) {
     time('Clip', 'csg', () => {
       const idx = buildDomainIndex(domainMesh!, grid);
-      clippedBeams = clipBoundaryBeams(graph, domainObj!, domainMesh!, idx, trim);
+      clippedBeams = clipBoundaryBeams(graph, domainObj!, domainMesh!, idx, trim, renderCylinderSegments);
       return `${clippedBeams.length} clipped`;
     });
   }
@@ -487,11 +488,10 @@ export function getVoxelizerTierOverride(): 'auto' | 'gpu' | 'cpu-wasm' | 'js' {
 export function setVoxelizerTierOverride(v: 'auto' | 'gpu' | 'cpu-wasm' | 'js') { voxelizerTierOverride = v; markDirty(); }
 
 export function getRenderCylinderSegments(): number { return renderCylinderSegments; }
-export function setRenderCylinderSegments(v: number) { renderCylinderSegments = Math.max(3, Math.min(32, Math.round(v))); console.log('[store] renderCylinderSegments =', renderCylinderSegments); }
+export function setRenderCylinderSegments(v: number) { renderCylinderSegments = Math.max(3, Math.min(32, Math.round(v))); renderVersion++; markDirty(); }
 export function getRenderFlatShading(): boolean { return renderFlatShading; }
-export function setRenderFlatShading(v: boolean) { renderFlatShading = v; }
-export function getRenderWireframe(): boolean { return renderWireframe; }
-export function setRenderWireframe(v: boolean) { renderWireframe = v; }
+export function setRenderFlatShading(v: boolean) { renderFlatShading = v; renderVersion++; }
+export function getRenderVersion(): number { return renderVersion; }
 
 // ─── Public API: export ─────────────────────────────────────────────────────
 

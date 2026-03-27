@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { Section, ScrubField, CheckboxRow, ToggleGroup } from '@gestalt/phi';
+  import { Section, CheckboxRow, ToggleGroup } from '@gestalt/phi';
   import { TreeList } from '@gestalt/phi';
   import type { TreeListDomain, TreeListItem, TreeListColumnDef, CellIcon } from '@gestalt/phi';
   import { Eye, EyeOff } from 'lucide-svelte';
@@ -14,7 +14,6 @@
     getShowAxes, setShowAxes,
     getDomainDisplayMode, setDomainDisplayMode,
     getDomainEnabled, getSkinEnabled,
-    getRenderCylinderSegments, setRenderCylinderSegments,
     getRenderFlatShading, setRenderFlatShading,
   } from '$lib/stores/lattice.svelte';
 
@@ -123,8 +122,7 @@
     </Section>
   {/if}
 
-  <Section sectionId="scene-quality" title="Quality" card>
-    <ScrubField label="Segments" value={getRenderCylinderSegments()} min={3} max={32} step={1} decimals={0} onValueChange={setRenderCylinderSegments} />
+  <Section sectionId="scene-quality" title="Shading" card>
     <CheckboxRow label="Flat Shading" checked={getRenderFlatShading()} onchange={setRenderFlatShading} />
   </Section>
 </div>
