@@ -21,13 +21,13 @@
   // 3-column layout: [Properties | Viewport | Scene+Stats]
   const gridview = new Gridview('horizontal');
 
-  const propertiesView = makeView('properties', { minW: 200 });
-  const viewportView = makeView('viewport', { minW: 300 });
-  const rightView = makeView('right', { minW: 160 });
+  const propertiesView = makeView('properties', { minW: 250 });
+  const viewportView = makeView('viewport', { minW: 700 });
+  const rightView = makeView('right', { minW: 250 });
 
-  gridview.addView(propertiesView, 260, [0]);
-  gridview.addView(viewportView, 700, [1]);
-  gridview.addView(rightView, 200, [2]);
+  gridview.addView(propertiesView, 25*10, [0]);
+  gridview.addView(viewportView, 60*100, [1]);
+  gridview.addView(rightView, 25*10, [2]);
 
   let groups: Record<string, DockPanelGroup> = $state({
     properties: { id: 'properties', panels: ['Properties'], activePanel: 'Properties' },
