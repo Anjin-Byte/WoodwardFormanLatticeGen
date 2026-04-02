@@ -45,7 +45,7 @@ jobs:
         run: pnpm --filter @lattice/app build
 
       - name: Upload artifact
-        uses: actions/upload-pages-artifact@v3
+        uses: actions/upload-pages-artifact@v4
         with:
           path: apps/lattice-app/dist
 
